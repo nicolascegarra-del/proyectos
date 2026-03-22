@@ -146,13 +146,8 @@ async def sync(
 
     server_updates: dict[str, list[dict]] = {}
     for entity_name, model_class in ENTITY_MAP.items():
-        workspace_field = None
         if hasattr(model_class, "workspace_id"):
             workspace_field = model_class.workspace_id
-        elif hasattr(model_class, "proyecto_id"):
-            pass
-
-        if workspace_field is not None:
             if data.last_sync_at:
                 result = await session.exec(
                     select(model_class).where(
@@ -163,6 +158,21 @@ async def sync(
             else:
                 result = await session.exec(
                     select(model_class).where(workspace_field == workspace_id)
+                )
+            server_updates[entity_name] = [_model_to_dict(obj) for obj in result.all()]
+        elif hasattr(model_class, "proyecto_id"):
+            if data.last_sync_at:
+                result = await session.exec(
+                    select(model_class).join(Proyecto).where(
+                        Proyecto.workspace_id == workspace_id,
+                        model_class.updated_at > data.last_sync_at,
+                    )
+                )
+            else:
+                result = await session.exec(
+                    select(model_class).join(Proyecto).where(
+                        Proyecto.workspace_id == workspace_id
+                    )
                 )
             server_updates[entity_name] = [_model_to_dict(obj) for obj in result.all()]
 

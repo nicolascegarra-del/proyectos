@@ -152,7 +152,7 @@ export default function ProyectoDetailPage() {
   }
 
   const copyPublicLink = () => {
-    if (!proyecto) return
+    if (!proyecto || !proyecto.public_uuid) return
     const url = `${window.location.origin}/p/${proyecto.public_uuid}`
     navigator.clipboard.writeText(url)
     toast({ title: 'Link público copiado' })
@@ -186,10 +186,12 @@ export default function ProyectoDetailPage() {
           <h1 className="text-xl font-semibold truncate">{proyecto.nombre}</h1>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <Button variant="outline" size="sm" className="h-9" onClick={copyPublicLink}>
-            <Copy className="mr-1.5 h-3.5 w-3.5" />
-            Link público
-          </Button>
+          {proyecto.public_uuid && (
+            <Button variant="outline" size="sm" className="h-9" onClick={copyPublicLink}>
+              <Copy className="mr-1.5 h-3.5 w-3.5" />
+              Link público
+            </Button>
+          )}
           <Button size="sm" className="h-9" onClick={() => setModalTarea('new')}>
             <Plus className="mr-1.5 h-4 w-4" />
             Tarea

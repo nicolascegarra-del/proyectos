@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, date
 from typing import Optional, Any
 from urllib.parse import urlparse
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 from app.models import (
     EstadoKanban,
@@ -302,11 +302,17 @@ class ProyectoOut(BaseModel):
     alerta_horas_max: Optional[float]
     stopwatch_enabled: bool
     retainer_horas: Optional[float]
-    public_uuid: uuid.UUID
+    public_uuid: Optional[uuid.UUID] = None
     is_public: bool
     created_at: datetime
     updated_at: datetime
     model_config = {"from_attributes": True}
+
+    @model_validator(mode='after')
+    def hide_uuid_if_private(self) -> 'ProyectoOut':
+        if not self.is_public:
+            self.public_uuid = None
+        return self
 
 
 # ── RetainerCiclo ─────────────────────────────────────────────────────────────

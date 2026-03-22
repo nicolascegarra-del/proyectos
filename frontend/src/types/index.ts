@@ -77,7 +77,7 @@ export interface Proyecto {
   alerta_horas_max: number | null
   stopwatch_enabled: boolean
   retainer_horas: number | null
-  public_uuid: string
+  public_uuid: string | null
   created_at: string
   updated_at: string
 }
