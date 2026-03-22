@@ -1,9 +1,11 @@
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 from sqlmodel import select
 
@@ -172,6 +174,9 @@ app.include_router(smtp.router)
 app.include_router(sync.router)
 app.include_router(public.router)
 app.include_router(dashboard.router)
+
+os.makedirs("/app/uploads", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="/app/uploads"), name="uploads")
 
 
 @app.get("/health")

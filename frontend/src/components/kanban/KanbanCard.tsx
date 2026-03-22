@@ -2,8 +2,7 @@ import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { Tarea, Tag } from '@/types'
 import { cn, formatHoras } from '@/lib/utils'
-import { Lock, Clock } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
+import { Lock, Clock, Github, Paperclip } from 'lucide-react'
 
 const ESTADO_PAGO_COLORS = {
   pendiente: 'text-yellow-500',
@@ -15,6 +14,20 @@ const ESTADO_PAGO_LABELS = {
   pendiente: 'Pendiente',
   facturado: 'Facturado',
   cobrado: 'Cobrado',
+}
+
+const PRIORIDAD_COLORS = {
+  critico: 'bg-red-500/20 text-red-400',
+  alto: 'bg-orange-500/20 text-orange-400',
+  medio: 'bg-yellow-500/20 text-yellow-400',
+  bajo: 'bg-green-500/20 text-green-400',
+}
+
+const PRIORIDAD_LABELS = {
+  critico: 'Crítico',
+  alto: 'Alto',
+  medio: 'Medio',
+  bajo: 'Bajo',
 }
 
 interface KanbanCardProps {
@@ -62,10 +75,35 @@ export function KanbanCard({ tarea, tag, onClick }: KanbanCardProps) {
         )}
       </div>
 
+      {/* Prioridad y complejidad */}
+      {(tarea.prioridad || tarea.complejidad) && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {tarea.prioridad && (
+            <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${PRIORIDAD_COLORS[tarea.prioridad]}`}>
+              {PRIORIDAD_LABELS[tarea.prioridad]}
+            </span>
+          )}
+          {tarea.complejidad && (
+            <span
+              className="text-[9px] px-1.5 py-0.5 rounded bg-muted font-mono font-bold text-muted-foreground"
+              title={tarea.complejidad === 9 ? 'Dividir tarea' : `Complejidad: ${tarea.complejidad}`}
+            >
+              {tarea.complejidad === 9 ? '⚡9' : tarea.complejidad}
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Clock className="h-3 w-3" />
           <span>{formatHoras(tarea.horas)}</span>
+          {tarea.github_url && (
+            <Github className="h-3 w-3" title="GitHub" />
+          )}
+          {tarea.archivo_url && (
+            <Paperclip className="h-3 w-3" title="Archivo adjunto" />
+          )}
         </div>
 
         <div className="flex items-center gap-1.5">

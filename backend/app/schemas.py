@@ -11,6 +11,7 @@ from app.models import (
     EstadoKanban,
     EstadoPago,
     EstadoPresupuesto,
+    Prioridad,
     RolWorkspace,
 )
 
@@ -365,6 +366,11 @@ class TareaCreate(BaseModel):
     es_backlog: bool = False
     estado_kanban: EstadoKanban = EstadoKanban.todo
     tag_id: Optional[uuid.UUID] = None
+    descripcion_larga: Optional[str] = None
+    github_url: Optional[str] = None
+    archivo_url: Optional[str] = None
+    prioridad: Optional[Prioridad] = None
+    complejidad: Optional[int] = Field(default=None, ge=1, le=9)
 
 
 class TareaUpdate(BaseModel):
@@ -376,6 +382,11 @@ class TareaUpdate(BaseModel):
     es_backlog: Optional[bool] = None
     estado_kanban: Optional[EstadoKanban] = None
     tag_id: Optional[uuid.UUID] = None
+    descripcion_larga: Optional[str] = None
+    github_url: Optional[str] = None
+    archivo_url: Optional[str] = None
+    prioridad: Optional[Prioridad] = None
+    complejidad: Optional[int] = Field(default=None, ge=1, le=9)
 
 
 class TareaOut(BaseModel):
@@ -389,6 +400,11 @@ class TareaOut(BaseModel):
     es_backlog: bool
     estado_kanban: EstadoKanban
     tag_id: Optional[uuid.UUID]
+    descripcion_larga: Optional[str]
+    github_url: Optional[str]
+    archivo_url: Optional[str]
+    prioridad: Optional[Prioridad]
+    complejidad: Optional[int]
     created_at: datetime
     updated_at: datetime
     alerta_horas: bool = False

@@ -106,7 +106,7 @@ async def update_workspace(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace no encontrado")
 
     workspace.nombre = data.nombre
-    workspace.updated_at = datetime.now(timezone.utc)
+    workspace.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     session.add(workspace)
     await session.commit()
     await session.refresh(workspace)
@@ -262,7 +262,7 @@ async def invite_member(
         rol=data.rol,
         token=token,
         invited_by=current_user.id,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+        expires_at=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=7),
     )
     session.add(invite)
     await session.commit()
@@ -310,7 +310,7 @@ async def accept_invite(
             detail="Este token de invitación no es para tu cuenta",
         )
 
-    if invite.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+    if invite.expires_at < datetime.now(timezone.utc).replace(tzinfo=None):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invitación expirada")
 
     already = await session.exec(

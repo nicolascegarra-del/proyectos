@@ -1,10 +1,16 @@
+import os
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
+
+UPLOAD_DIR = Path("/app/uploads")
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".zip", ".txt", ".md"}
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
 from app.core.dependencies import get_current_user, get_workspace_member
 from app.database import get_session
@@ -160,7 +166,7 @@ async def update_tarea(
     prev_estado_pago = tarea.estado_pago
     for field, value in data.model_dump(exclude_none=True).items():
         setattr(tarea, field, value)
-    tarea.updated_at = datetime.now(timezone.utc)
+    tarea.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     session.add(tarea)
     await session.commit()
     await session.refresh(tarea)
@@ -187,6 +193,46 @@ async def update_tarea(
     out.alerta_horas = alerta_horas
     out.alerta_retainer = alerta_retainer
     return out
+
+
+@router.post("/{tarea_id}/upload", response_model=TareaOut)
+async def upload_archivo(
+    workspace_id: uuid.UUID,
+    proyecto_id: uuid.UUID,
+    tarea_id: uuid.UUID,
+    file: UploadFile = File(...),
+    member=Depends(get_workspace_member),
+    session: AsyncSession = Depends(get_session),
+):
+    if member.rol not in WRITE_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin permisos")
+
+    await _get_proyecto_or_404(workspace_id, proyecto_id, session)
+    result = await session.exec(
+        select(Tarea).where(Tarea.id == tarea_id, Tarea.proyecto_id == proyecto_id)
+    )
+    tarea = result.first()
+    if not tarea:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tarea no encontrada")
+
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Extensión no permitida: {ext}")
+
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="El archivo supera los 10 MB")
+
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    safe_name = f"{tarea_id}_{uuid.uuid4().hex[:8]}{ext}"
+    (UPLOAD_DIR / safe_name).write_bytes(content)
+
+    tarea.archivo_url = f"/uploads/{safe_name}"
+    tarea.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    session.add(tarea)
+    await session.commit()
+    await session.refresh(tarea)
+    return tarea
 
 
 @router.delete("/{tarea_id}", status_code=status.HTTP_204_NO_CONTENT)

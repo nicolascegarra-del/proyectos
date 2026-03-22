@@ -2,6 +2,7 @@ export type RolWorkspace = 'owner' | 'admin' | 'member' | 'viewer'
 export type EstadoPago = 'pendiente' | 'facturado' | 'cobrado'
 export type EstadoKanban = 'backlog' | 'todo' | 'en_progreso' | 'revision' | 'done'
 export type EstadoPresupuesto = 'borrador' | 'enviado' | 'aceptado' | 'rechazado'
+export type Prioridad = 'critico' | 'alto' | 'medio' | 'bajo'
 
 export interface Plan {
   id: string
@@ -110,6 +111,11 @@ export interface Tarea {
   es_backlog: boolean
   estado_kanban: EstadoKanban
   tag_id: string | null
+  descripcion_larga: string | null
+  github_url: string | null
+  archivo_url: string | null
+  prioridad: Prioridad | null
+  complejidad: number | null
   created_at: string
   updated_at: string
   alerta_horas?: boolean

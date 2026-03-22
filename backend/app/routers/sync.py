@@ -74,7 +74,7 @@ async def sync(
     _member=Depends(get_workspace_member),
     session: AsyncSession = Depends(get_session),
 ):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     applied: list[uuid.UUID] = []
     conflicts: list[SyncConflict] = []
 

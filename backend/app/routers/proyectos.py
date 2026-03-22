@@ -110,7 +110,7 @@ async def update_proyecto(
 
     for field, value in data.model_dump(exclude_none=True).items():
         setattr(proyecto, field, value)
-    proyecto.updated_at = datetime.now(timezone.utc)
+    proyecto.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     session.add(proyecto)
     await session.commit()
     await session.refresh(proyecto)

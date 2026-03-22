@@ -113,7 +113,7 @@ async def update_gasto(
 
     for field, value in data.model_dump(exclude_none=True).items():
         setattr(gasto, field, value)
-    gasto.updated_at = datetime.now(timezone.utc)
+    gasto.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     session.add(gasto)
     await session.commit()
     await session.refresh(gasto)

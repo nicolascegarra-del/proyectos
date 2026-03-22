@@ -5,20 +5,13 @@ import { api, getErrorMessage } from '@/lib/api'
 import type { EstadoKanban, Proyecto, RetainerCiclo, Tag, Tarea } from '@/types'
 import { KanbanBoard } from '@/components/kanban/KanbanBoard'
 import { Stopwatch } from '@/components/stopwatch/Stopwatch'
+import { TareaModal } from '@/components/tareas/TareaModal'
 import { formatEUR, formatHoras, today } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
-import { AlertTriangle, ArrowLeft, Copy, Loader2, Plus } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Skeleton } from '@/components/ui/skeleton'
+import { AlertTriangle, ArrowLeft, Copy, Pencil, Plus } from 'lucide-react'
 import { toast } from '@/components/ui/use-toast'
 import { enqueueSync, db, upsertLocal } from '@/lib/db'
 import { useSyncStore } from '@/store/syncStore'
@@ -36,11 +29,8 @@ export default function ProyectoDetailPage() {
   const [ciclo, setCiclo] = useState<RetainerCiclo | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const [newTaskOpen, setNewTaskOpen] = useState(false)
-  const [newTaskDesc, setNewTaskDesc] = useState('')
-  const [newTaskHoras, setNewTaskHoras] = useState('0')
-  const [newTaskFecha, setNewTaskFecha] = useState(today())
-  const [saving, setSaving] = useState(false)
+  // Modal de tarea: null = cerrado, 'new' = crear, Tarea = editar
+  const [modalTarea, setModalTarea] = useState<Tarea | 'new' | null>(null)
 
   const load = async () => {
     if (!currentWorkspace) return
@@ -69,28 +59,19 @@ export default function ProyectoDetailPage() {
 
   useEffect(() => { load() }, [proyectoId, currentWorkspace?.id])
 
-  const handleAddTask = async () => {
-    if (!newTaskDesc || !currentWorkspace) return
-    setSaving(true)
-    const horas = parseFloat(newTaskHoras) || 0
-    try {
-      const { data } = await api.post<Tarea>(
-        `/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/tareas`,
-        { descripcion: newTaskDesc, horas, fecha: newTaskFecha },
-      )
-      setTareas((t) => [...t, data])
-      await upsertLocal(db.tareas, data)
-      setNewTaskOpen(false)
-      setNewTaskDesc('')
-      setNewTaskHoras('0')
-      setNewTaskFecha(today())
-      if (data.alerta_horas) toast({ title: '⚠️ Has alcanzado el límite de horas del proyecto' })
-      if (data.alerta_retainer) toast({ title: '⚠️ Has superado la bolsa de horas del retainer' })
-    } catch (err) {
-      toast({ title: getErrorMessage(err), variant: 'destructive' })
-    } finally {
-      setSaving(false)
-    }
+  const handleTareaSaved = async (saved: Tarea) => {
+    setTareas((prev) =>
+      prev.some((t) => t.id === saved.id)
+        ? prev.map((t) => (t.id === saved.id ? saved : t))
+        : [...prev, saved],
+    )
+    await upsertLocal(db.tareas, saved)
+    if (saved.alerta_horas) toast({ title: 'Has alcanzado el límite de horas del proyecto' })
+    if (saved.alerta_retainer) toast({ title: 'Has superado la bolsa de horas del retainer' })
+  }
+
+  const handleTareaDeleted = (id: string) => {
+    setTareas((prev) => prev.filter((t) => t.id !== id))
   }
 
   const handleStopwatchStop = async (horas: number) => {
@@ -124,6 +105,11 @@ export default function ProyectoDetailPage() {
         es_backlog: false,
         estado_kanban: 'todo',
         tag_id: null,
+        descripcion_larga: null,
+        github_url: null,
+        archivo_url: null,
+        prioridad: null,
+        complejidad: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }
@@ -166,8 +152,15 @@ export default function ProyectoDetailPage() {
 
   if (loading || !proyecto) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className="space-y-4 max-w-6xl">
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-9 w-9 rounded" />
+          <Skeleton className="h-6 w-48" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-16 rounded-lg" />)}
+        </div>
+        <Skeleton className="h-96 rounded-lg" />
       </div>
     )
   }
@@ -189,7 +182,7 @@ export default function ProyectoDetailPage() {
             <Copy className="mr-1.5 h-3.5 w-3.5" />
             Link público
           </Button>
-          <Button size="sm" className="h-9" onClick={() => setNewTaskOpen(true)}>
+          <Button size="sm" className="h-9" onClick={() => setModalTarea('new')}>
             <Plus className="mr-1.5 h-4 w-4" />
             Tarea
           </Button>
@@ -252,52 +245,54 @@ export default function ProyectoDetailPage() {
             tareas={tareas.filter((t) => !t.es_backlog)}
             tags={tags}
             onMoveCard={handleMoveCard}
+            onCardClick={(t) => setModalTarea(t)}
           />
         </TabsContent>
         <TabsContent value="lista" className="mt-3">
           <div className="space-y-2">
-            {tareas.map((t) => (
-              <div key={t.id} className="flex items-center gap-3 bg-card border border-border rounded-md px-4 py-3">
-                <span className="flex-1 text-sm truncate">{t.descripcion}</span>
-                <span className="text-xs text-muted-foreground">{formatHoras(t.horas)}</span>
-                <Badge variant="outline" className="text-xs">{t.estado_pago}</Badge>
-                {t.is_locked && <span className="text-xs text-muted-foreground">🔒</span>}
+            {tareas.length === 0 ? (
+              <div className="flex items-center justify-center h-32 text-sm text-muted-foreground border border-dashed border-border rounded-lg">
+                No hay tareas
               </div>
-            ))}
+            ) : (
+              tareas.map((t) => (
+                <div
+                  key={t.id}
+                  className="flex items-center gap-3 bg-card border border-border rounded-md px-4 py-3 hover:border-primary/20 transition-colors cursor-pointer"
+                  onClick={() => setModalTarea(t)}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm truncate">{t.descripcion}</p>
+                    <p className="text-xs text-muted-foreground">{t.fecha} · {formatHoras(t.horas)}</p>
+                  </div>
+                  {t.prioridad && (
+                    <Badge variant="outline" className="text-xs capitalize hidden sm:flex">{t.prioridad}</Badge>
+                  )}
+                  {t.complejidad && (
+                    <span className="text-xs font-mono text-muted-foreground hidden sm:block">
+                      {t.complejidad === 9 ? '⚡9' : t.complejidad}
+                    </span>
+                  )}
+                  <Badge variant="outline" className="text-xs">{t.estado_pago}</Badge>
+                  {t.is_locked && <span className="text-xs">🔒</span>}
+                  <Pencil className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                </div>
+              ))
+            )}
           </div>
         </TabsContent>
       </Tabs>
 
-      <Dialog open={newTaskOpen} onOpenChange={(v) => { if (!v) setNewTaskOpen(false) }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Nueva tarea</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label>Descripción</Label>
-              <Input value={newTaskDesc} onChange={(e) => setNewTaskDesc(e.target.value)} placeholder="Descripción de la tarea" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Horas</Label>
-                <Input type="number" min="0" step="0.25" value={newTaskHoras} onChange={(e) => setNewTaskHoras(e.target.value)} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Fecha</Label>
-                <Input type="date" value={newTaskFecha} onChange={(e) => setNewTaskFecha(e.target.value)} />
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setNewTaskOpen(false)}>Cancelar</Button>
-            <Button onClick={handleAddTask} disabled={saving || !newTaskDesc}>
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Crear
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <TareaModal
+        open={modalTarea !== null}
+        onOpenChange={(v) => !v && setModalTarea(null)}
+        tarea={modalTarea !== 'new' ? modalTarea ?? undefined : undefined}
+        proyectoId={proyectoId}
+        workspaceId={currentWorkspace?.id ?? ''}
+        tags={tags}
+        onSaved={handleTareaSaved}
+        onDeleted={handleTareaDeleted}
+      />
     </div>
   )
 }

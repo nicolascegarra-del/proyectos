@@ -22,7 +22,7 @@ class Plan(SQLModel, table=True):
     precio: float = 0.0
     activo: bool = True
     es_default: bool = False
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class User(SQLModel, table=True):
@@ -36,8 +36,8 @@ class User(SQLModel, table=True):
     plan_id: Optional[uuid.UUID] = Field(default=None, foreign_key="plan.id")
     is_active: bool = True
     is_superadmin: bool = False
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class RefreshToken(SQLModel, table=True):
@@ -48,7 +48,7 @@ class RefreshToken(SQLModel, table=True):
     token: str = Field(unique=True, index=True)
     expires_at: datetime
     revoked: bool = False
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class PasswordResetToken(SQLModel, table=True):
@@ -59,7 +59,7 @@ class PasswordResetToken(SQLModel, table=True):
     token: str = Field(unique=True, index=True)
     expires_at: datetime
     used: bool = False
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class Workspace(SQLModel, table=True):
@@ -68,8 +68,8 @@ class Workspace(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     nombre: str = Field(max_length=255)
     owner_id: uuid.UUID = Field(foreign_key="user.id", index=True)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class RolWorkspace(str, Enum):
@@ -87,7 +87,7 @@ class WorkspaceMember(SQLModel, table=True):
     user_id: uuid.UUID = Field(foreign_key="user.id", index=True)
     rol: RolWorkspace = RolWorkspace.member
     invited_by: Optional[uuid.UUID] = Field(default=None, foreign_key="user.id")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class WorkspaceInvite(SQLModel, table=True):
@@ -101,7 +101,7 @@ class WorkspaceInvite(SQLModel, table=True):
     invited_by: uuid.UUID = Field(foreign_key="user.id")
     expires_at: datetime
     accepted: bool = False
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class SMTPConfig(SQLModel, table=True):
@@ -117,7 +117,7 @@ class SMTPConfig(SQLModel, table=True):
     from_name: str = Field(max_length=255)
     use_tls: bool = True
     use_ssl: bool = False
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class Cliente(SQLModel, table=True):
@@ -127,8 +127,8 @@ class Cliente(SQLModel, table=True):
     workspace_id: uuid.UUID = Field(foreign_key="workspace.id", index=True)
     nombre: str = Field(max_length=255)
     email: Optional[str] = Field(default=None, max_length=255)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class Proyecto(SQLModel, table=True):
@@ -144,8 +144,8 @@ class Proyecto(SQLModel, table=True):
     retainer_horas: Optional[float] = None
     public_uuid: uuid.UUID = Field(default_factory=uuid.uuid4, unique=True, index=True)
     is_public: bool = False
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class RetainerCiclo(SQLModel, table=True):
@@ -157,7 +157,7 @@ class RetainerCiclo(SQLModel, table=True):
     fecha_inicio: date
     fecha_fin: Optional[date] = None
     is_active: bool = True
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class Tag(SQLModel, table=True):
@@ -167,13 +167,20 @@ class Tag(SQLModel, table=True):
     workspace_id: uuid.UUID = Field(foreign_key="workspace.id", index=True)
     nombre: str = Field(max_length=100)
     color: str = Field(max_length=7)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class EstadoPago(str, Enum):
     pendiente = "pendiente"
     facturado = "facturado"
     cobrado = "cobrado"
+
+
+class Prioridad(str, Enum):
+    critico = "critico"
+    alto = "alto"
+    medio = "medio"
+    bajo = "bajo"
 
 
 class EstadoKanban(str, Enum):
@@ -201,8 +208,13 @@ class Tarea(SQLModel, table=True):
     es_backlog: bool = False
     estado_kanban: EstadoKanban = EstadoKanban.todo
     tag_id: Optional[uuid.UUID] = Field(default=None, foreign_key="tag.id")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    descripcion_larga: Optional[str] = None
+    github_url: Optional[str] = Field(default=None, max_length=500)
+    archivo_url: Optional[str] = Field(default=None, max_length=500)
+    prioridad: Optional[Prioridad] = None
+    complejidad: Optional[int] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class Gasto(SQLModel, table=True):
@@ -216,8 +228,8 @@ class Gasto(SQLModel, table=True):
     concepto: str = Field(max_length=500)
     monto: float
     fecha: date
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class Articulo(SQLModel, table=True):
@@ -227,8 +239,8 @@ class Articulo(SQLModel, table=True):
     workspace_id: uuid.UUID = Field(foreign_key="workspace.id", index=True)
     concepto: str = Field(max_length=500)
     precio_base: float
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class EstadoPresupuesto(str, Enum):
@@ -253,8 +265,8 @@ class Presupuesto(SQLModel, table=True):
     estado: EstadoPresupuesto = EstadoPresupuesto.borrador
     total: float = 0.0
     is_locked: bool = False
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class PresupuestoLinea(SQLModel, table=True):
@@ -267,8 +279,8 @@ class PresupuestoLinea(SQLModel, table=True):
     cantidad: float
     precio_unitario: float
     subtotal: float
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class Configuracion(SQLModel, table=True):
@@ -289,4 +301,4 @@ class Configuracion(SQLModel, table=True):
         )
     )
     webhook_url: Optional[str] = Field(default=None, max_length=500)
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))

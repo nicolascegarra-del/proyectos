@@ -139,7 +139,7 @@ async def update_presupuesto(
     prev_estado = p.estado
     for field, value in data.model_dump(exclude_none=True).items():
         setattr(p, field, value)
-    p.updated_at = datetime.now(timezone.utc)
+    p.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     session.add(p)
     await session.commit()
     await session.refresh(p)
@@ -298,7 +298,7 @@ async def update_linea(
         setattr(linea, field, value)
 
     linea.subtotal = linea.cantidad * linea.precio_unitario
-    linea.updated_at = datetime.now(timezone.utc)
+    linea.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     session.add(linea)
 
     await _recalculate_total(presupuesto_id, session)
@@ -362,7 +362,7 @@ async def _recalculate_total(presupuesto_id: uuid.UUID, session: AsyncSession) -
     p = p_result.first()
     if p:
         p.total = total
-        p.updated_at = datetime.now(timezone.utc)
+        p.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         session.add(p)
 
 

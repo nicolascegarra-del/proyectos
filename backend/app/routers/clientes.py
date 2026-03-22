@@ -82,7 +82,7 @@ async def update_cliente(
 
     for field, value in data.model_dump(exclude_none=True).items():
         setattr(cliente, field, value)
-    cliente.updated_at = datetime.now(timezone.utc)
+    cliente.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     session.add(cliente)
     await session.commit()
     await session.refresh(cliente)

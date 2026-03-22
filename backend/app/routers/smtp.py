@@ -88,7 +88,7 @@ async def update_smtp_config(
 
     for field, value in update_data.items():
         setattr(config, field, value)
-    config.updated_at = datetime.now(timezone.utc)
+    config.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     session.add(config)
     await session.commit()
     await session.refresh(config)

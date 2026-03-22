@@ -50,7 +50,7 @@ async def update_configuracion(
 
     for field, value in data.model_dump(exclude_none=True).items():
         setattr(config, field, value)
-    config.updated_at = datetime.now(timezone.utc)
+    config.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     session.add(config)
     await session.commit()
     await session.refresh(config)

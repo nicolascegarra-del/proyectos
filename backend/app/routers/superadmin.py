@@ -124,7 +124,7 @@ async def assign_user_plan(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan no encontrado")
 
     user.plan_id = data.plan_id
-    user.updated_at = datetime.now(timezone.utc)
+    user.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     session.add(user)
     await session.commit()
     await session.refresh(user)
@@ -143,7 +143,7 @@ async def toggle_user_active(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
 
     user.is_active = not user.is_active
-    user.updated_at = datetime.now(timezone.utc)
+    user.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     session.add(user)
     await session.commit()
     await session.refresh(user)

@@ -84,7 +84,7 @@ async def register(
     refresh_token = RefreshToken(
         user_id=user.id,
         token=refresh_token_str,
-        expires_at=datetime.now(timezone.utc)
+        expires_at=datetime.now(timezone.utc).replace(tzinfo=None)
         + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
     )
     session.add(refresh_token)
@@ -144,7 +144,7 @@ async def login(
     refresh_token = RefreshToken(
         user_id=user.id,
         token=refresh_token_str,
-        expires_at=datetime.now(timezone.utc)
+        expires_at=datetime.now(timezone.utc).replace(tzinfo=None)
         + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
     )
     session.add(refresh_token)
@@ -181,7 +181,7 @@ async def refresh_tokens(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token inválido o revocado",
         )
-    if token.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+    if token.expires_at < datetime.now(timezone.utc).replace(tzinfo=None):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token expirado",
@@ -202,7 +202,7 @@ async def refresh_tokens(
     new_refresh = RefreshToken(
         user_id=user.id,
         token=new_refresh_str,
-        expires_at=datetime.now(timezone.utc)
+        expires_at=datetime.now(timezone.utc).replace(tzinfo=None)
         + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
     )
     session.add(new_refresh)
@@ -284,7 +284,7 @@ async def reset_password(
         )
 
     user.password_hash = hash_password(data.new_password)
-    user.updated_at = datetime.now(timezone.utc)
+    user.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     reset_token.used = True
     session.add(user)
     session.add(reset_token)
@@ -316,7 +316,7 @@ async def update_me(
             )
         current_user.password_hash = hash_password(data.new_password)
 
-    current_user.updated_at = datetime.now(timezone.utc)
+    current_user.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     session.add(current_user)
     await session.commit()
     await session.refresh(current_user)

@@ -86,7 +86,7 @@ async def update_articulo(
 
     for field, value in data.model_dump(exclude_none=True).items():
         setattr(articulo, field, value)
-    articulo.updated_at = datetime.now(timezone.utc)
+    articulo.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     session.add(articulo)
     await session.commit()
     await session.refresh(articulo)
