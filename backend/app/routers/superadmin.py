@@ -169,15 +169,17 @@ async def get_metrics(
     total_workspaces = total_ws_result.one()
 
     plans_result = await session.exec(select(Plan))
-    plans = plans_result.all()
+    plans = {p.id: p for p in plans_result.all()}
 
-    users_by_plan = []
-    for plan in plans:
-        count_result = await session.exec(
-            select(func.count(User.id)).where(User.plan_id == plan.id)
-        )
-        count = count_result.one()
-        users_by_plan.append({"plan": plan.nombre, "count": count, "precio": plan.precio})
+    counts_result = await session.exec(
+        select(User.plan_id, func.count(User.id)).group_by(User.plan_id)
+    )
+    counts_by_plan_id = {row[0]: row[1] for row in counts_result.all()}
+
+    users_by_plan = [
+        {"plan": p.nombre, "count": counts_by_plan_id.get(p.id, 0), "precio": p.precio}
+        for p in plans.values()
+    ]
 
     return SuperadminMetrics(
         total_users=total_users,

@@ -40,12 +40,20 @@ WRITE_ROLES = (RolWorkspace.owner, RolWorkspace.admin, RolWorkspace.member)
 async def _next_numero(workspace_id: uuid.UUID, session: AsyncSession) -> str:
     year = datetime.now().year
     result = await session.exec(
-        select(func.count(Presupuesto.id)).where(
-            Presupuesto.workspace_id == workspace_id
+        select(func.max(Presupuesto.numero)).where(
+            Presupuesto.workspace_id == workspace_id,
+            Presupuesto.numero.like(f"PRE-{year}-%"),  # type: ignore[union-attr]
         )
     )
-    count = result.one() or 0
-    return f"PRE-{year}-{count + 1:04d}"
+    last = result.one()
+    if last:
+        try:
+            last_num = int(last.split("-")[-1])
+        except (ValueError, IndexError):
+            last_num = 0
+    else:
+        last_num = 0
+    return f"PRE-{year}-{last_num + 1:04d}"
 
 
 @router.get("", response_model=list[PresupuestoOut])
@@ -76,6 +84,22 @@ async def create_presupuesto(
     await check_limit(
         session, current_user, ResourceType.presupuesto, workspace_id=workspace_id
     )
+
+    # Verificar que cliente_id pertenece al workspace
+    if data.cliente_id:
+        cliente_result = await session.exec(
+            select(Cliente).where(Cliente.id == data.cliente_id, Cliente.workspace_id == workspace_id)
+        )
+        if not cliente_result.first():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cliente no encontrado en este workspace")
+
+    # Verificar que proyecto_id pertenece al workspace
+    if data.proyecto_id:
+        proyecto_result = await session.exec(
+            select(Proyecto).where(Proyecto.id == data.proyecto_id, Proyecto.workspace_id == workspace_id)
+        )
+        if not proyecto_result.first():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Proyecto no encontrado en este workspace")
 
     numero = await _next_numero(workspace_id, session)
     presupuesto = Presupuesto(

@@ -73,7 +73,6 @@ class LoginRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
-    refresh_token: str
     token_type: str = "bearer"
 
 
@@ -358,6 +357,14 @@ class TagOut(BaseModel):
 
 # ── Tarea ─────────────────────────────────────────────────────────────────────
 
+def _validate_github_url(v: Optional[str]) -> Optional[str]:
+    if v is None:
+        return v
+    if not v.startswith("https://"):
+        raise ValueError("La URL debe usar HTTPS")
+    return v
+
+
 class TareaCreate(BaseModel):
     descripcion: str
     horas: float = Field(default=0.0, ge=0, le=24)
@@ -366,11 +373,16 @@ class TareaCreate(BaseModel):
     es_backlog: bool = False
     estado_kanban: EstadoKanban = EstadoKanban.todo
     tag_id: Optional[uuid.UUID] = None
-    descripcion_larga: Optional[str] = None
+    descripcion_larga: Optional[str] = Field(default=None, max_length=10000)
     github_url: Optional[str] = None
     archivo_url: Optional[str] = None
     prioridad: Optional[Prioridad] = None
     complejidad: Optional[int] = Field(default=None, ge=1, le=9)
+
+    @field_validator("github_url")
+    @classmethod
+    def validate_github_url(cls, v: Optional[str]) -> Optional[str]:
+        return _validate_github_url(v)
 
 
 class TareaUpdate(BaseModel):
@@ -382,11 +394,16 @@ class TareaUpdate(BaseModel):
     es_backlog: Optional[bool] = None
     estado_kanban: Optional[EstadoKanban] = None
     tag_id: Optional[uuid.UUID] = None
-    descripcion_larga: Optional[str] = None
+    descripcion_larga: Optional[str] = Field(default=None, max_length=10000)
     github_url: Optional[str] = None
     archivo_url: Optional[str] = None
     prioridad: Optional[Prioridad] = None
     complejidad: Optional[int] = Field(default=None, ge=1, le=9)
+
+    @field_validator("github_url")
+    @classmethod
+    def validate_github_url(cls, v: Optional[str]) -> Optional[str]:
+        return _validate_github_url(v)
 
 
 class TareaOut(BaseModel):

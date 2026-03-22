@@ -1,19 +1,22 @@
 import os
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
 from slowapi.errors import RateLimitExceeded
 from sqlmodel import select
 
 from app.config import settings
 from app.core.limiter import limiter
-from app.core.security import hash_password
-from app.database import AsyncSessionLocal, create_db_and_tables
-from app.models import Plan, RolWorkspace, User, Workspace, WorkspaceMember
+from app.core.security import decode_access_token, hash_password
+from app.database import AsyncSessionLocal, create_db_and_tables, get_session
+from app.models import Plan, Proyecto, RolWorkspace, Tarea, User, Workspace, WorkspaceMember
+
+UPLOAD_DIR = Path("/app/uploads")
 from app.routers import (
     articulos,
     auth,
@@ -176,7 +179,67 @@ app.include_router(public.router)
 app.include_router(dashboard.router)
 
 os.makedirs("/app/uploads", exist_ok=True)
-app.mount("/uploads", StaticFiles(directory="/app/uploads"), name="uploads")
+
+
+@app.get("/uploads/{filename}")
+async def serve_upload(
+    filename: str,
+    request: Request,
+    token: str | None = Query(default=None),
+    session=Depends(get_session),
+):
+    """Sirve archivos adjuntos solo a usuarios autenticados y con acceso al workspace."""
+    # Acepta token via query param (para links directos en <a href>) o via Bearer header
+    raw_token = token
+    if not raw_token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            raw_token = auth_header[7:]
+    if not raw_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No autenticado")
+
+    payload = decode_access_token(raw_token)
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido")
+
+    user_id = payload.get("sub")
+    user_result = await session.exec(select(User).where(User.id == uuid.UUID(user_id)))
+    user = user_result.first()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuario inactivo")
+
+    # Verificar que el archivo existe
+    file_path = UPLOAD_DIR / filename
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archivo no encontrado")
+
+    # Verificar que el usuario tiene acceso al workspace de la tarea
+    # El filename tiene formato: {tarea_id}_{8hex}{ext}
+    try:
+        tarea_id = uuid.UUID(filename[:36])
+    except (ValueError, IndexError):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archivo no encontrado")
+
+    tarea_result = await session.exec(select(Tarea).where(Tarea.id == tarea_id))
+    tarea = tarea_result.first()
+    if not tarea:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archivo no encontrado")
+
+    proyecto_result = await session.exec(select(Proyecto).where(Proyecto.id == tarea.proyecto_id))
+    proyecto = proyecto_result.first()
+    if not proyecto:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archivo no encontrado")
+
+    member_result = await session.exec(
+        select(WorkspaceMember).where(
+            WorkspaceMember.workspace_id == proyecto.workspace_id,
+            WorkspaceMember.user_id == user.id,
+        )
+    )
+    if not member_result.first():
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin acceso")
+
+    return FileResponse(file_path)
 
 
 @app.get("/health")

@@ -120,6 +120,9 @@ async def update_gasto(
     return gasto
 
 
+DELETE_ROLES = (RolWorkspace.owner, RolWorkspace.admin)
+
+
 @router.delete("/{gasto_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_gasto(
     workspace_id: uuid.UUID,
@@ -128,7 +131,7 @@ async def delete_gasto(
     member=Depends(get_workspace_member),
     session: AsyncSession = Depends(get_session),
 ):
-    if member.rol not in WRITE_ROLES:
+    if member.rol not in DELETE_ROLES:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin permisos")
 
     await _get_proyecto_or_404(workspace_id, proyecto_id, session)

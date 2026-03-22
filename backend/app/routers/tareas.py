@@ -20,6 +20,7 @@ from app.models import (
     Proyecto,
     RetainerCiclo,
     RolWorkspace,
+    Tag,
     Tarea,
     User,
 )
@@ -106,6 +107,13 @@ async def create_tarea(
         session, current_user, ResourceType.tarea, proyecto_id=proyecto_id
     )
 
+    if data.tag_id:
+        tag_result = await session.exec(
+            select(Tag).where(Tag.id == data.tag_id, Tag.workspace_id == workspace_id)
+        )
+        if not tag_result.first():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tag no encontrado en este workspace")
+
     tarea = Tarea(proyecto_id=proyecto_id, **data.model_dump())
     session.add(tarea)
     await session.commit()
@@ -162,6 +170,13 @@ async def update_tarea(
             status_code=status.HTTP_409_CONFLICT,
             detail="La tarea está bloqueada y no se puede editar",
         )
+
+    if data.tag_id:
+        tag_result = await session.exec(
+            select(Tag).where(Tag.id == data.tag_id, Tag.workspace_id == workspace_id)
+        )
+        if not tag_result.first():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tag no encontrado en este workspace")
 
     prev_estado_pago = tarea.estado_pago
     for field, value in data.model_dump(exclude_none=True).items():

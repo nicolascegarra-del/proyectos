@@ -112,7 +112,7 @@ async def register(
     await session.commit()
 
     _set_refresh_cookie(response, refresh_token_str)
-    return TokenResponse(access_token=access_token, refresh_token=refresh_token_str)
+    return TokenResponse(access_token=access_token)
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -151,7 +151,7 @@ async def login(
     await session.commit()
 
     _set_refresh_cookie(response, refresh_token_str)
-    return TokenResponse(access_token=access_token, refresh_token=refresh_token_str)
+    return TokenResponse(access_token=access_token)
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -209,7 +209,7 @@ async def refresh_tokens(
     await session.commit()
 
     _set_refresh_cookie(response, new_refresh_str)
-    return TokenResponse(access_token=new_access, refresh_token=new_refresh_str)
+    return TokenResponse(access_token=new_access)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

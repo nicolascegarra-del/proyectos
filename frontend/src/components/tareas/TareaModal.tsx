@@ -393,7 +393,7 @@ export function TareaModal({
                       <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
                         <Paperclip className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                         <a
-                          href={archivoUrl}
+                          href={`${archivoUrl}?token=${localStorage.getItem('access_token') ?? ''}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-xs text-primary truncate flex-1 flex items-center gap-1 hover:underline"
