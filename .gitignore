@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Variables de entorno
+.env
+.env.*
+!.env.example
+
+# Base de datos
+*.db
+*.sqlite
+
+# Node
+node_modules/
+dist/
+.next/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Docker
+postgres_data/

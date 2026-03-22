@@ -1,0 +1,65 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: klyp-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: klyp
+      POSTGRES_PASSWORD: klyp
+      POSTGRES_DB: klyp
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - klyp-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U klyp"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    container_name: klyp-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://klyp:klyp@db:5432/klyp
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - klyp-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: klyp-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - klyp-net
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
+volumes:
+  postgres_data:
+
+networks:
+  klyp-net:
+    driver: bridge
