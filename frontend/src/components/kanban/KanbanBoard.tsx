@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import {
   DndContext,
   DragEndEvent,
+  DragOverEvent,
   DragOverlay,
   DragStartEvent,
   PointerSensor,
@@ -35,6 +36,7 @@ interface KanbanBoardProps {
 
 export function KanbanBoard({ tareas, tags, onMoveCard, onCardClick }: KanbanBoardProps) {
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [overColId, setOverColId] = useState<EstadoKanban | null>(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -54,9 +56,19 @@ export function KanbanBoard({ tareas, tags, onMoveCard, onCardClick }: KanbanBoa
     setActiveId(event.active.id as string)
   }, [])
 
+  const handleDragOver = useCallback((event: DragOverEvent) => {
+    const overId = event.over?.id as string | undefined
+    if (!overId) { setOverColId(null); return }
+    const col = COLUMNS.find((c) => c.id === overId)
+    if (col) { setOverColId(col.id); return }
+    const colFromCard = tareas.find((t) => t.id === overId)?.estado_kanban ?? null
+    setOverColId(colFromCard as EstadoKanban | null)
+  }, [tareas])
+
   const handleDragEnd = useCallback(
     async (event: DragEndEvent) => {
       setActiveId(null)
+      setOverColId(null)
       const { active, over } = event
       if (!over) return
 
@@ -81,6 +93,7 @@ export function KanbanBoard({ tareas, tags, onMoveCard, onCardClick }: KanbanBoa
       sensors={sensors}
       collisionDetection={closestCorners}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
       <div className="flex gap-3 overflow-x-auto pb-2 min-h-[400px]">
@@ -107,7 +120,10 @@ export function KanbanBoard({ tareas, tags, onMoveCard, onCardClick }: KanbanBoa
                 <div
                   id={col.id}
                   className={cn(
-                    'flex-1 flex flex-col gap-2 p-2 rounded-lg bg-muted/20 border border-border/50',
+                    'flex-1 flex flex-col gap-2 p-2 rounded-lg border transition-colors',
+                    overColId === col.id && activeId
+                      ? 'bg-primary/10 border-primary/40'
+                      : 'bg-muted/20 border-border/50',
                     'min-h-[200px]',
                   )}
                 >

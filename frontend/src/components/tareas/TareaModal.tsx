@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertDialog } from '@/components/ui/alert-dialog'
-import { Loader2, Paperclip, Trash2, X, ExternalLink } from 'lucide-react'
+import { ChevronDown, ChevronUp, Loader2, Paperclip, Trash2, X, ExternalLink } from 'lucide-react'
 import { toast } from '@/components/ui/use-toast'
 
 const COMPLEJIDAD_LABELS: Record<number, string> = {
@@ -27,7 +27,7 @@ const COMPLEJIDAD_LABELS: Record<number, string> = {
   6: '6 — Difícil',
   7: '7 — Muy difícil',
   8: '8 — Complejo',
-  9: '9 ⚡ — Dividir tarea',
+  9: '9 — Dividir tarea',
 }
 
 interface TareaModalProps {
@@ -83,6 +83,8 @@ export function TareaModal({
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [archivoUrl, setArchivoUrl] = useState<string | null>(null)
+  const [showExtras, setShowExtras] = useState(false)
+  const [descError, setDescError] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const pendingFileRef = useRef<File | null>(null)
 
@@ -102,10 +104,13 @@ export function TareaModal({
           estado_kanban: tarea.estado_kanban,
         })
         setArchivoUrl(tarea.archivo_url)
+        setShowExtras(!!(tarea.github_url || tarea.archivo_url))
       } else {
         setForm(emptyForm())
         setArchivoUrl(null)
+        setShowExtras(false)
       }
+      setDescError(false)
       pendingFileRef.current = null
     }
   }, [open, tarea])
@@ -143,7 +148,10 @@ export function TareaModal({
   }
 
   const handleSave = async () => {
-    if (!form.descripcion) return
+    if (!form.descripcion.trim()) {
+      setDescError(true)
+      return
+    }
     setSaving(true)
     try {
       const payload = {
@@ -174,7 +182,6 @@ export function TareaModal({
         savedTarea = data
       }
 
-      // Subir archivo si hay uno pendiente
       if (pendingFileRef.current) {
         const url = await uploadFile(savedTarea.id)
         if (url) savedTarea = { ...savedTarea, archivo_url: url }
@@ -209,31 +216,41 @@ export function TareaModal({
   return (
     <>
       <Dialog open={open} onOpenChange={(v) => !isBusy && onOpenChange(v)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-lg w-full sm:h-auto h-screen sm:rounded-lg rounded-none flex flex-col max-h-screen sm:max-h-[90vh]">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>{isEdit ? 'Editar tarea' : 'Nueva tarea'}</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-3">
-            {/* Descripción corta */}
+          <div className="space-y-3 overflow-y-auto flex-1 pr-1">
+            {/* Descripción */}
             <div className="space-y-1.5">
-              <Label>Descripción</Label>
+              <Label>
+                Descripción
+                <span className="text-destructive ml-1">*</span>
+              </Label>
               <Input
                 value={form.descripcion}
-                onChange={(e) => set('descripcion', e.target.value)}
+                onChange={(e) => { set('descripcion', e.target.value); setDescError(false) }}
                 placeholder="Título de la tarea"
                 autoFocus
+                aria-required="true"
+                aria-invalid={descError}
+                className={descError ? 'border-destructive' : ''}
               />
+              {descError && (
+                <p className="text-xs text-destructive">La descripción es obligatoria</p>
+              )}
             </div>
 
             {/* Descripción larga */}
             <div className="space-y-1.5">
               <Label>Descripción detallada</Label>
               <Textarea
-                rows={3}
+                rows={5}
                 value={form.descripcion_larga}
                 onChange={(e) => set('descripcion_larga', e.target.value)}
                 placeholder="Contexto, criterios de aceptación, notas..."
+                className="resize-y"
               />
             </div>
 
@@ -302,9 +319,9 @@ export function TareaModal({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pendiente">Pendiente</SelectItem>
-                    <SelectItem value="facturado">Facturado</SelectItem>
-                    <SelectItem value="cobrado">Cobrado</SelectItem>
+                    <SelectItem value="pendiente">⏳ Pendiente</SelectItem>
+                    <SelectItem value="facturado">💳 Facturado</SelectItem>
+                    <SelectItem value="cobrado">✅ Cobrado</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -346,67 +363,84 @@ export function TareaModal({
               </Select>
             </div>
 
-            {/* GitHub URL */}
-            <div className="space-y-1.5">
-              <Label>Ruta GitHub (PR, branch, issue...)</Label>
-              <Input
-                value={form.github_url}
-                onChange={(e) => set('github_url', e.target.value)}
-                placeholder="https://github.com/org/repo/pull/123"
-              />
-            </div>
+            {/* Extras collapsible: GitHub + Archivo */}
+            <div className="border border-border/50 rounded-md overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowExtras((v) => !v)}
+                className="w-full flex items-center justify-between px-3 py-2 text-xs text-muted-foreground hover:bg-muted/50 transition-colors"
+              >
+                <span className="font-medium">Enlace GitHub y archivo adjunto</span>
+                {showExtras ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </button>
 
-            {/* Archivo adjunto */}
-            <div className="space-y-1.5">
-              <Label>Archivo adjunto</Label>
-              {archivoUrl ? (
-                <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
-                  <Paperclip className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                  <a
-                    href={archivoUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-primary truncate flex-1 flex items-center gap-1 hover:underline"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {archivoUrl.split('/').pop()}
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={(e) => { e.stopPropagation(); setArchivoUrl(null) }}
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-8"
-                    onClick={(e) => { e.stopPropagation(); fileRef.current?.click() }}
-                  >
-                    <Paperclip className="mr-1.5 h-3.5 w-3.5" />
-                    {pendingFileRef.current ? pendingFileRef.current.name : 'Adjuntar archivo'}
-                  </Button>
-                  <span className="text-xs text-muted-foreground">máx. 10 MB</span>
+              {showExtras && (
+                <div className="px-3 pb-3 space-y-3 border-t border-border/50 pt-3">
+                  {/* GitHub URL */}
+                  <div className="space-y-1.5">
+                    <Label>Ruta GitHub (PR, branch, issue...)</Label>
+                    <Input
+                      value={form.github_url}
+                      onChange={(e) => set('github_url', e.target.value)}
+                      placeholder="https://github.com/org/repo/pull/123"
+                    />
+                  </div>
+
+                  {/* Archivo adjunto */}
+                  <div className="space-y-1.5">
+                    <Label>Archivo adjunto</Label>
+                    {archivoUrl ? (
+                      <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
+                        <Paperclip className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                        <a
+                          href={archivoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-primary truncate flex-1 flex items-center gap-1 hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {archivoUrl.split('/').pop()}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={(e) => { e.stopPropagation(); setArchivoUrl(null) }}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8"
+                          onClick={(e) => { e.stopPropagation(); fileRef.current?.click() }}
+                        >
+                          <Paperclip className="mr-1.5 h-3.5 w-3.5" />
+                          {pendingFileRef.current ? pendingFileRef.current.name : 'Adjuntar archivo'}
+                        </Button>
+                        {uploading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+                        {!uploading && <span className="text-xs text-muted-foreground">máx. 10 MB</span>}
+                      </div>
+                    )}
+                    <input
+                      ref={fileRef}
+                      type="file"
+                      className="hidden"
+                      accept=".jpg,.jpeg,.png,.gif,.pdf,.doc,.docx,.xls,.xlsx,.zip,.txt,.md"
+                      onChange={handleFileSelect}
+                    />
+                  </div>
                 </div>
               )}
-              <input
-                ref={fileRef}
-                type="file"
-                className="hidden"
-                accept=".jpg,.jpeg,.png,.gif,.pdf,.doc,.docx,.xls,.xlsx,.zip,.txt,.md"
-                onChange={handleFileSelect}
-              />
             </div>
           </div>
 
-          <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
+          <DialogFooter className="flex-shrink-0 flex-col-reverse sm:flex-row gap-2 pt-2">
             {isEdit && (
               <Button
                 variant="ghost"
@@ -422,7 +456,8 @@ export function TareaModal({
               Cancelar
             </Button>
             <Button onClick={handleSave} disabled={isBusy || !form.descripcion}>
-              {isBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {uploading && !saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {isEdit ? 'Guardar cambios' : 'Crear tarea'}
             </Button>
           </DialogFooter>

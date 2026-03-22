@@ -123,6 +123,7 @@ export default function ProyectoDetailPage() {
 
   const handleMoveCard = async (tareaId: string, newEstado: EstadoKanban) => {
     if (!currentWorkspace) return
+    const prevEstado = tareas.find((t) => t.id === tareaId)?.estado_kanban
     setTareas((t) =>
       t.map((task) =>
         task.id === tareaId ? { ...task, estado_kanban: newEstado } : task,
@@ -135,7 +136,14 @@ export default function ProyectoDetailPage() {
           { estado_kanban: newEstado },
         )
       } catch {
-        load()
+        if (prevEstado) {
+          setTareas((t) =>
+            t.map((task) =>
+              task.id === tareaId ? { ...task, estado_kanban: prevEstado } : task,
+            ),
+          )
+        }
+        toast({ title: 'Error al mover la tarea', variant: 'destructive' })
       }
     } else {
       await enqueueSync('tarea', tareaId, 'update', { estado_kanban: newEstado })

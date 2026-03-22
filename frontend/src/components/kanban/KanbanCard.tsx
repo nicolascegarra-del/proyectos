@@ -85,10 +85,14 @@ export function KanbanCard({ tarea, tag, onClick }: KanbanCardProps) {
           )}
           {tarea.complejidad && (
             <span
-              className="text-[9px] px-1.5 py-0.5 rounded bg-muted font-mono font-bold text-muted-foreground"
-              title={tarea.complejidad === 9 ? 'Dividir tarea' : `Complejidad: ${tarea.complejidad}`}
+              className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold ${
+                tarea.complejidad === 9
+                  ? 'bg-red-500/20 text-red-400'
+                  : 'bg-muted text-muted-foreground'
+              }`}
+              title={tarea.complejidad === 9 ? 'Dividir tarea — demasiado compleja' : `Complejidad: ${tarea.complejidad}`}
             >
-              {tarea.complejidad === 9 ? '⚡9' : tarea.complejidad}
+              {tarea.complejidad === 9 ? 'DIVIDIR' : `C${tarea.complejidad}`}
             </span>
           )}
         </div>
