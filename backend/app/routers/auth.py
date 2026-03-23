@@ -1,7 +1,10 @@
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, HTTPException, Request, Response, status
+
+logger = logging.getLogger(__name__)
 from sqlmodel import select
 
 from app.core.dependencies import get_current_user
@@ -129,6 +132,8 @@ async def login(
     if not user or not user.password_hash or not verify_password(
         data.password, user.password_hash
     ):
+        ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
+        logger.warning("Failed login attempt for email=%s ip=%s", data.email, ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciales incorrectas",
@@ -150,6 +155,7 @@ async def login(
     session.add(refresh_token)
     await session.commit()
 
+    logger.info("Successful login user_id=%s email=%s", user.id, user.email)
     _set_refresh_cookie(response, refresh_token_str)
     return TokenResponse(access_token=access_token)
 
@@ -289,6 +295,7 @@ async def reset_password(
     session.add(user)
     session.add(reset_token)
     await session.commit()
+    logger.info("Password reset completed user_id=%s", user.id)
 
 
 @router.get("/me", response_model=UserOut)
@@ -315,6 +322,7 @@ async def update_me(
                 detail="Contraseña actual incorrecta",
             )
         current_user.password_hash = hash_password(data.new_password)
+        logger.info("Password changed user_id=%s", current_user.id)
 
     current_user.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     session.add(current_user)

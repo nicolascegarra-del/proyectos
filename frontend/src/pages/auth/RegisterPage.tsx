@@ -88,7 +88,7 @@ export default function RegisterPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="pr-10"
+              className={`pr-10 ${password.length > 0 && password.length < 8 ? 'border-destructive focus-visible:ring-destructive' : ''}`}
             />
             <button
               type="button"
@@ -99,6 +99,9 @@ export default function RegisterPage() {
               {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
+          {password.length > 0 && password.length < 8 && (
+            <p className="text-xs text-destructive">{8 - password.length} caracteres más</p>
+          )}
         </div>
 
         {error && (

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, Link } from '@tanstack/react-router'
 import { useAuthStore } from '@/store/authStore'
 import { api, getErrorMessage } from '@/lib/api'
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Loader2, Eye, EyeOff } from 'lucide-react'
+import { toast } from '@/components/ui/use-toast'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -17,6 +18,13 @@ export default function LoginPage() {
 
   const { setTokens, fetchMe } = useAuthStore()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (localStorage.getItem('session_expired')) {
+      localStorage.removeItem('session_expired')
+      toast({ title: 'Sesión expirada', description: 'Inicia sesión de nuevo para continuar.', variant: 'destructive' })
+    }
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

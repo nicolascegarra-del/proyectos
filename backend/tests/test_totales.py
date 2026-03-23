@@ -42,6 +42,7 @@ async def test_presupuesto_total_calculado_correctamente(
     assert response2.status_code == 201
     assert response2.json()["subtotal"] == 300.0
 
+    session.expunge(presupuesto)
     result = await session.exec(
         select(Presupuesto).where(Presupuesto.id == presupuesto.id)
     )

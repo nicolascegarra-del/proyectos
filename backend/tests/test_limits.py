@@ -13,6 +13,7 @@ async def test_no_puede_crear_mas_workspaces_del_limite(
     auth_headers: dict,
     user: User,
     plan: Plan,
+    workspace,
 ):
     plan.max_workspaces = 1
     session.add(plan)
@@ -58,6 +59,7 @@ async def test_limite_ilimitado_con_minus_uno(
     user: User,
     plan: Plan,
     workspace,
+    cliente,
 ):
     plan.max_proyectos_por_workspace = -1
     session.add(plan)
@@ -127,7 +129,7 @@ async def test_registro_asigna_plan_default(
 
     response = await client.post(
         "/auth/register",
-        json={"email": "nuevo@klyp.app", "password": "secure123", "nombre": "Nuevo"},
+        json={"email": "nuevo@klyp.app", "password": "Secure123!", "nombre": "Nuevo"},
     )
     assert response.status_code == 201
 
