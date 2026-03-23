@@ -639,4 +639,24 @@ class SuperadminMetrics(BaseModel):
     total_users: int
     active_users: int
     total_workspaces: int
+    total_proyectos: int = 0
+    total_tareas: int = 0
     users_by_plan: list[dict[str, Any]]
+
+
+class SuperadminUpdateUser(BaseModel):
+    nombre: Optional[str] = None
+    email: Optional[EmailStr] = None
+    is_active: Optional[bool] = None
+
+
+class SuperadminUserWorkspaceOut(BaseModel):
+    workspace_id: uuid.UUID
+    nombre: str
+    rol: str
+    proyectos_count: int
+    created_at: datetime
+
+
+class ResetPasswordOut(BaseModel):
+    new_password: str

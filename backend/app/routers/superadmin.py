@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -7,16 +8,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from app.core.dependencies import get_current_superadmin
+from app.core.security import hash_password
 from app.database import get_session
-from app.models import Plan, User, Workspace, WorkspaceMember
+from app.models import Plan, Proyecto, Tarea, User, Workspace, WorkspaceMember
 from app.schemas import (
     AssignPlanRequest,
     PlanCreate,
     PlanOut,
     PlanUpdate,
+    ResetPasswordOut,
     SuperadminMetrics,
+    SuperadminUpdateUser,
+    SuperadminUserWorkspaceOut,
     UserOut,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/superadmin", tags=["superadmin"])
 
@@ -181,9 +188,119 @@ async def get_metrics(
         for p in plans.values()
     ]
 
+    total_proyectos_result = await session.exec(select(func.count(Proyecto.id)))
+    total_proyectos = total_proyectos_result.one()
+
+    total_tareas_result = await session.exec(select(func.count(Tarea.id)))
+    total_tareas = total_tareas_result.one()
+
     return SuperadminMetrics(
         total_users=total_users,
         active_users=active_users,
         total_workspaces=total_workspaces,
+        total_proyectos=total_proyectos,
+        total_tareas=total_tareas,
         users_by_plan=users_by_plan,
     )
+
+
+# ── User management ───────────────────────────────────────────────────────────
+
+@router.get("/users/{user_id}/workspaces", response_model=list[SuperadminUserWorkspaceOut])
+async def get_user_workspaces(
+    user_id: uuid.UUID,
+    _=Depends(get_current_superadmin),
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.exec(
+        select(WorkspaceMember, Workspace)
+        .join(Workspace, WorkspaceMember.workspace_id == Workspace.id)
+        .where(WorkspaceMember.user_id == user_id)
+    )
+    rows = result.all()
+    out = []
+    for member, workspace in rows:
+        proyectos_result = await session.exec(
+            select(func.count()).where(Proyecto.workspace_id == workspace.id)
+        )
+        proyectos_count = proyectos_result.one() or 0
+        out.append(SuperadminUserWorkspaceOut(
+            workspace_id=workspace.id,
+            nombre=workspace.nombre,
+            rol=member.rol,
+            proyectos_count=proyectos_count,
+            created_at=workspace.created_at,
+        ))
+    return out
+
+
+@router.put("/users/{user_id}", response_model=UserOut)
+async def update_user(
+    user_id: uuid.UUID,
+    data: SuperadminUpdateUser,
+    _=Depends(get_current_superadmin),
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.exec(select(User).where(User.id == user_id))
+    user = result.first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+
+    if data.nombre is not None:
+        user.nombre = data.nombre
+    if data.email is not None:
+        existing = await session.exec(select(User).where(User.email == data.email, User.id != user_id))
+        if existing.first():
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Este email ya está en uso")
+        user.email = data.email
+    if data.is_active is not None:
+        user.is_active = data.is_active
+
+    user.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    session.add(user)
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(
+    user_id: uuid.UUID,
+    _=Depends(get_current_superadmin),
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.exec(select(User).where(User.id == user_id))
+    user = result.first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+    if user.is_superadmin:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No se puede eliminar un superadmin")
+    await session.delete(user)
+    await session.commit()
+
+
+@router.post("/users/{user_id}/reset-password", response_model=ResetPasswordOut)
+async def reset_user_password(
+    user_id: uuid.UUID,
+    _=Depends(get_current_superadmin),
+    session: AsyncSession = Depends(get_session),
+):
+    import secrets, string
+    result = await session.exec(select(User).where(User.id == user_id))
+    user = result.first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+
+    alphabet = string.ascii_letters + string.digits + "!@#$%"
+    new_password = (
+        secrets.choice(string.ascii_uppercase) +
+        secrets.choice(string.digits) +
+        secrets.choice("!@#$%") +
+        "".join(secrets.choice(alphabet) for _ in range(9))
+    )
+    user.password_hash = hash_password(new_password)
+    user.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    session.add(user)
+    await session.commit()
+    logger.info("Password reset by superadmin for user_id=%s", user_id)
+    return ResetPasswordOut(new_password=new_password)
