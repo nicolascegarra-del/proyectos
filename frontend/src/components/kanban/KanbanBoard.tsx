@@ -1,20 +1,16 @@
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import {
   DndContext,
   DragEndEvent,
-  DragOverEvent,
   DragOverlay,
   DragStartEvent,
-  PointerSensor,
+  MouseSensor,
   TouchSensor,
   useSensor,
   useSensors,
-  closestCorners,
+  useDroppable,
+  DragOverEvent,
 } from '@dnd-kit/core'
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable'
 import type { EstadoKanban, Tag, Tarea } from '@/types'
 import { KanbanCard } from './KanbanCard'
 import { cn } from '@/lib/utils'
@@ -26,6 +22,58 @@ const COLUMNS: { id: EstadoKanban; label: string }[] = [
   { id: 'revision', label: 'Revisión' },
   { id: 'done', label: 'Hecho' },
 ]
+
+function DroppableColumn({
+  col,
+  tareas,
+  tags,
+  isOver,
+  onCardClick,
+}: {
+  col: { id: EstadoKanban; label: string }
+  tareas: Tarea[]
+  tags: Map<string, Tag>
+  isOver: boolean
+  onCardClick?: (t: Tarea) => void
+}) {
+  const { setNodeRef } = useDroppable({ id: col.id })
+
+  return (
+    <div className="flex-shrink-0 w-64 flex flex-col gap-2">
+      <div className="flex items-center justify-between px-1">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          {col.label}
+        </h3>
+        <span className="text-xs text-muted-foreground bg-muted rounded px-1.5 py-0.5">
+          {tareas.length}
+        </span>
+      </div>
+
+      <div
+        ref={setNodeRef}
+        className={cn(
+          'flex-1 flex flex-col gap-2 p-2 rounded-lg border transition-colors min-h-[200px]',
+          isOver ? 'bg-primary/10 border-primary/40' : 'bg-muted/20 border-border/50',
+        )}
+      >
+        {tareas.length === 0 ? (
+          <div className="flex items-center justify-center h-20 text-sm text-muted-foreground border-2 border-dashed rounded-lg">
+            Sin tareas
+          </div>
+        ) : (
+          tareas.map((tarea) => (
+            <KanbanCard
+              key={tarea.id}
+              tarea={tarea}
+              tag={tarea.tag_id ? tags.get(tarea.tag_id) : undefined}
+              onClick={onCardClick}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
 
 interface KanbanBoardProps {
   tareas: Tarea[]
@@ -39,121 +87,74 @@ export function KanbanBoard({ tareas, tags, onMoveCard, onCardClick }: KanbanBoa
   const [overColId, setOverColId] = useState<EstadoKanban | null>(null)
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 200, tolerance: 8 },
-    }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 3 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
   )
 
   const tagMap = new Map(tags.map((t) => [t.id, t]))
 
   const byColumn = (col: EstadoKanban) =>
-    tareas.filter((t) => t.estado_kanban === col && !t.es_backlog)
+    tareas.filter((t) => t.estado_kanban === col)
 
   const activeTarea = activeId ? tareas.find((t) => t.id === activeId) : null
 
-  const handleDragStart = useCallback((event: DragStartEvent) => {
+  const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string)
-  }, [])
+  }
 
-  const handleDragOver = useCallback((event: DragOverEvent) => {
-    const overId = event.over?.id as string | undefined
-    if (!overId) { setOverColId(null); return }
-    const col = COLUMNS.find((c) => c.id === overId)
-    if (col) { setOverColId(col.id); return }
-    const colFromCard = tareas.find((t) => t.id === overId)?.estado_kanban ?? null
-    setOverColId(colFromCard as EstadoKanban | null)
-  }, [tareas])
-
-  const handleDragEnd = useCallback(
-    async (event: DragEndEvent) => {
-      setActiveId(null)
+  const handleDragOver = (event: DragOverEvent) => {
+    const overId = event.over?.id as EstadoKanban | undefined
+    if (overId && COLUMNS.some((c) => c.id === overId)) {
+      setOverColId(overId)
+    } else {
       setOverColId(null)
-      const { active, over } = event
-      if (!over) return
+    }
+  }
 
-      const overId = over.id as string
-      const targetCol = COLUMNS.find(
-        (c) => c.id === overId || tareas.find((t) => t.id === overId)?.estado_kanban === c.id,
-      )
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    setActiveId(null)
+    setOverColId(null)
 
-      const targetEstado: EstadoKanban | undefined =
-        (COLUMNS.find((c) => c.id === overId)?.id) ??
-        tareas.find((t) => t.id === overId)?.estado_kanban
+    if (!over) return
 
-      if (targetEstado && targetEstado !== tareas.find((t) => t.id === active.id)?.estado_kanban) {
-        await onMoveCard(active.id as string, targetEstado)
-      }
-    },
-    [tareas, onMoveCard],
-  )
+    const targetColId = over.id as EstadoKanban
+    if (!COLUMNS.some((c) => c.id === targetColId)) return
+
+    const currentEstado = tareas.find((t) => t.id === active.id)?.estado_kanban
+    if (targetColId !== currentEstado) {
+      onMoveCard(active.id as string, targetColId)
+    }
+  }
 
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
       <div className="flex gap-3 overflow-x-auto pb-2 min-h-[400px]">
-        {COLUMNS.map((col) => {
-          const colTareas = byColumn(col.id)
-          return (
-            <div
-              key={col.id}
-              className="flex-shrink-0 w-64 flex flex-col gap-2"
-            >
-              <div className="flex items-center justify-between px-1">
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  {col.label}
-                </h3>
-                <span className="text-xs text-muted-foreground bg-muted rounded px-1.5 py-0.5">
-                  {colTareas.length}
-                </span>
-              </div>
-
-              <SortableContext
-                items={colTareas.map((t) => t.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                <div
-                  id={col.id}
-                  className={cn(
-                    'flex-1 flex flex-col gap-2 p-2 rounded-lg border transition-colors',
-                    overColId === col.id && activeId
-                      ? 'bg-primary/10 border-primary/40'
-                      : 'bg-muted/20 border-border/50',
-                    'min-h-[200px]',
-                  )}
-                >
-                  {colTareas.length === 0 ? (
-                    <div className="flex items-center justify-center h-20 text-sm text-muted-foreground border-2 border-dashed rounded-lg">
-                      Sin tareas
-                    </div>
-                  ) : (
-                    colTareas.map((tarea) => (
-                      <KanbanCard
-                        key={tarea.id}
-                        tarea={tarea}
-                        tag={tarea.tag_id ? tagMap.get(tarea.tag_id) : undefined}
-                        onClick={onCardClick}
-                      />
-                    ))
-                  )}
-                </div>
-              </SortableContext>
-            </div>
-          )
-        })}
+        {COLUMNS.map((col) => (
+          <DroppableColumn
+            key={col.id}
+            col={col}
+            tareas={byColumn(col.id)}
+            tags={tagMap}
+            isOver={overColId === col.id && !!activeId}
+            onCardClick={onCardClick}
+          />
+        ))}
       </div>
 
-      <DragOverlay>
+      <DragOverlay dropAnimation={null}>
         {activeTarea && (
-          <KanbanCard
-            tarea={activeTarea}
-            tag={activeTarea.tag_id ? tagMap.get(activeTarea.tag_id) : undefined}
-          />
+          <div className="rotate-2 shadow-xl opacity-95">
+            <KanbanCard
+              tarea={activeTarea}
+              tag={activeTarea.tag_id ? tagMap.get(activeTarea.tag_id) : undefined}
+            />
+          </div>
         )}
       </DragOverlay>
     </DndContext>
