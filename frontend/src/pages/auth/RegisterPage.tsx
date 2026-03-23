@@ -6,7 +6,14 @@ import type { TokenResponse } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Loader2, Eye, EyeOff } from 'lucide-react'
+import { Loader2, Eye, EyeOff, Check, X } from 'lucide-react'
+
+const PASSWORD_CHECKS = [
+  { label: 'Mínimo 8 caracteres', test: (p: string) => p.length >= 8 },
+  { label: 'Una letra mayúscula (A-Z)', test: (p: string) => /[A-Z]/.test(p) },
+  { label: 'Un número (0-9)', test: (p: string) => /[0-9]/.test(p) },
+  { label: 'Un carácter especial (!@#...)', test: (p: string) => /[^A-Za-z0-9]/.test(p) },
+]
 
 export default function RegisterPage() {
   const [nombre, setNombre] = useState('')
@@ -22,8 +29,9 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    if (password.length < 8) {
-      setError('La contraseña debe tener al menos 8 caracteres')
+    const failedChecks = PASSWORD_CHECKS.filter(({ test }) => !test(password))
+    if (failedChecks.length > 0) {
+      setError(failedChecks.map(({ label }) => label).join(', '))
       return
     }
     setLoading(true)
@@ -84,11 +92,11 @@ export default function RegisterPage() {
               id="password"
               type={showPass ? 'text' : 'password'}
               autoComplete="new-password"
-              placeholder="Mínimo 8 caracteres"
+              placeholder="Crea una contraseña segura"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className={`pr-10 ${password.length > 0 && password.length < 8 ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+              className="pr-10"
             />
             <button
               type="button"
@@ -99,8 +107,20 @@ export default function RegisterPage() {
               {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
-          {password.length > 0 && password.length < 8 && (
-            <p className="text-xs text-destructive">{8 - password.length} caracteres más</p>
+          {password.length > 0 && (
+            <ul className="space-y-1 mt-1.5">
+              {PASSWORD_CHECKS.map(({ label, test }) => {
+                const ok = test(password)
+                return (
+                  <li key={label} className={`flex items-center gap-1.5 text-xs ${ok ? 'text-green-500' : 'text-muted-foreground'}`}>
+                    {ok
+                      ? <Check className="h-3 w-3 flex-shrink-0" />
+                      : <X className="h-3 w-3 flex-shrink-0" />}
+                    {label}
+                  </li>
+                )
+              })}
+            </ul>
           )}
         </div>
 

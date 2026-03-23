@@ -75,8 +75,25 @@ api.interceptors.response.use(
 export function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     const detail = error.response?.data?.detail
+
+    // Mensaje de texto directo
     if (typeof detail === 'string') return detail
-    if (typeof detail === 'object' && detail?.message) return detail.message
+
+    // Objeto con campo message (ej. errores de límite de plan)
+    if (detail && typeof detail === 'object' && !Array.isArray(detail) && detail.message) {
+      return detail.message
+    }
+
+    // Array de errores de validación Pydantic (422)
+    if (Array.isArray(detail) && detail.length > 0) {
+      const messages = detail
+        .map((e: { msg?: string }) =>
+          (e.msg ?? '').replace(/^Value error,\s*/i, '').trim(),
+        )
+        .filter(Boolean)
+      if (messages.length > 0) return messages.join('. ')
+    }
+
     return error.message
   }
   return 'Error desconocido'

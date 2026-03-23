@@ -82,7 +82,7 @@ export default function ProyectosPage() {
       toast({ title: 'Proyecto creado' })
     } catch (err) {
       const msg = getErrorMessage(err)
-      toast({ title: isLimitError(err) ? 'Límite de plan alcanzado' : 'Error', description: msg, variant: 'destructive' })
+      toast({ title: isLimitError(err) ? 'Límite de plan alcanzado' : 'No se pudo crear el proyecto', description: msg, variant: 'destructive' })
     } finally {
       setSaving(false)
     }

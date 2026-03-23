@@ -66,7 +66,7 @@ export default function WorkspacesPage() {
     } catch (err) {
       const msg = getErrorMessage(err)
       toast({
-        title: isLimitError(err) ? 'Límite de workspaces alcanzado' : 'Error',
+        title: isLimitError(err) ? 'Límite de workspaces alcanzado' : 'No se pudo crear el workspace',
         description: msg,
         variant: 'destructive',
       })

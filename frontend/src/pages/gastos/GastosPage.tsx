@@ -74,7 +74,7 @@ export default function GastosPage() {
     } catch (err) {
       const msg = getErrorMessage(err)
       toast({
-        title: isLimitError(err) ? 'Límite alcanzado' : 'Error',
+        title: isLimitError(err) ? 'Límite de plan alcanzado' : 'No se pudo registrar el gasto',
         description: msg,
         variant: 'destructive',
       })

@@ -97,7 +97,7 @@ export default function PresupuestosPage() {
     } catch (err) {
       const msg = getErrorMessage(err)
       toast({
-        title: isLimitError(err) ? 'Límite alcanzado' : 'Error',
+        title: isLimitError(err) ? 'Límite de plan alcanzado' : 'No se pudo crear el presupuesto',
         description: msg,
         variant: 'destructive',
       })
