@@ -5,9 +5,10 @@ import type { EstadoPago, Proyecto, Tag, Tarea } from '@/types'
 import { formatHoras, formatDate } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Lock } from 'lucide-react'
+import { Lock, Plus, Pencil } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from '@/components/ui/use-toast'
+import { TareaModal } from '@/components/tareas/TareaModal'
 
 const ESTADO_PAGO_COLORS: Record<EstadoPago, string> = {
   pendiente: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
@@ -23,6 +24,7 @@ export default function TareasPage() {
   const [loading, setLoading] = useState(true)
   const [filterProyecto, setFilterProyecto] = useState<string>('all')
   const [filterEstado, setFilterEstado] = useState<string>('all')
+  const [modalTarea, setModalTarea] = useState<Tarea | 'new' | null>(null)
 
   const load = async () => {
     if (!currentWorkspace) return
@@ -30,10 +32,9 @@ export default function TareasPage() {
     try {
       const pRes = await api.get<Proyecto[]>(`/workspaces/${currentWorkspace.id}/proyectos`)
       setProyectos(pRes.data)
-      const tareasProm = pRes.data.map((p) =>
-        api.get<Tarea[]>(`/workspaces/${currentWorkspace.id}/proyectos/${p.id}/tareas`),
+      const results = await Promise.all(
+        pRes.data.map((p) => api.get<Tarea[]>(`/workspaces/${currentWorkspace.id}/proyectos/${p.id}/tareas`))
       )
-      const results = await Promise.all(tareasProm)
       setTareas(results.flatMap((r) => r.data))
       const tagsRes = await api.get<Tag[]>(`/workspaces/${currentWorkspace.id}/tags`)
       setTags(tagsRes.data)
@@ -47,10 +48,7 @@ export default function TareasPage() {
   useEffect(() => { load() }, [currentWorkspace?.id])
 
   const handleUpdateEstadoPago = async (tarea: Tarea, estado: EstadoPago) => {
-    if (tarea.is_locked) {
-      toast({ title: 'Tarea bloqueada', variant: 'destructive' })
-      return
-    }
+    if (tarea.is_locked) { toast({ title: 'Tarea bloqueada', variant: 'destructive' }); return }
     if (!currentWorkspace) return
     try {
       const { data } = await api.put<Tarea>(
@@ -64,8 +62,7 @@ export default function TareasPage() {
   }
 
   const handleToggleLock = async (tarea: Tarea) => {
-    const proyecto = proyectos.find((p) => p.id === tarea.proyecto_id)
-    if (!proyecto || !currentWorkspace) return
+    if (!currentWorkspace) return
     try {
       const { data } = await api.put<Tarea>(
         `/workspaces/${currentWorkspace.id}/proyectos/${tarea.proyecto_id}/tareas/${tarea.id}`,
@@ -77,6 +74,18 @@ export default function TareasPage() {
     }
   }
 
+  const handleSaved = (saved: Tarea) => {
+    setTareas((prev) =>
+      prev.some((t) => t.id === saved.id)
+        ? prev.map((t) => (t.id === saved.id ? saved : t))
+        : [saved, ...prev]
+    )
+  }
+
+  const handleDeleted = (id: string) => {
+    setTareas((prev) => prev.filter((t) => t.id !== id))
+  }
+
   const tagMap = new Map(tags.map((t) => [t.id, t]))
   const proyectoMap = new Map(proyectos.map((p) => [p.id, p]))
 
@@ -86,6 +95,9 @@ export default function TareasPage() {
     .sort((a, b) => b.fecha.localeCompare(a.fecha))
 
   const totalHoras = filtered.reduce((s, t) => s + t.horas, 0)
+
+  const activeTarea = modalTarea !== null && modalTarea !== 'new' ? modalTarea : undefined
+  const activeProyectoId = activeTarea?.proyecto_id ?? ''
 
   if (loading) {
     return (
@@ -118,6 +130,10 @@ export default function TareasPage() {
           <h1 className="text-xl font-semibold">Bitácora</h1>
           <p className="text-xs text-muted-foreground">{formatHoras(totalHoras)} registradas</p>
         </div>
+        <Button size="sm" className="h-10" onClick={() => setModalTarea('new')}>
+          <Plus className="mr-1.5 h-4 w-4" />
+          Nueva tarea
+        </Button>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -147,8 +163,12 @@ export default function TareasPage() {
 
       <div className="space-y-2">
         {filtered.length === 0 ? (
-          <div className="flex items-center justify-center h-40 text-muted-foreground text-sm border border-dashed border-border rounded-lg">
-            No hay tareas con estos filtros
+          <div className="flex flex-col items-center justify-center h-40 gap-3 text-muted-foreground text-sm border border-dashed border-border rounded-lg">
+            <p>No hay tareas con estos filtros</p>
+            <Button size="sm" variant="outline" onClick={() => setModalTarea('new')}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Nueva tarea
+            </Button>
           </div>
         ) : (
           filtered.map((tarea) => {
@@ -157,7 +177,8 @@ export default function TareasPage() {
             return (
               <div
                 key={tarea.id}
-                className="flex items-center gap-3 bg-card border border-border rounded-md px-4 py-3 hover:border-primary/20 transition-colors"
+                className="flex items-center gap-3 bg-card border border-border rounded-md px-4 py-3 hover:border-primary/20 transition-colors cursor-pointer"
+                onClick={() => setModalTarea(tarea)}
               >
                 <div className="flex-1 min-w-0 space-y-0.5">
                   <p className="text-sm truncate">{tarea.descripcion}</p>
@@ -168,10 +189,7 @@ export default function TareasPage() {
                     {tag && (
                       <>
                         <span>·</span>
-                        <span
-                          className="inline-flex items-center gap-1"
-                          style={{ color: tag.color }}
-                        >
+                        <span className="inline-flex items-center gap-1" style={{ color: tag.color }}>
                           <span className="w-1.5 h-1.5 rounded-full bg-current" />
                           {tag.nombre}
                         </span>
@@ -180,7 +198,7 @@ export default function TareasPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                   <span className="text-sm font-medium tabular-nums">{formatHoras(tarea.horas)}</span>
                   <Select
                     value={tarea.estado_pago}
@@ -205,12 +223,25 @@ export default function TareasPage() {
                   >
                     <Lock className={`h-3.5 w-3.5 ${tarea.is_locked ? 'text-yellow-500' : 'text-muted-foreground'}`} />
                   </Button>
+                  <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                 </div>
               </div>
             )
           })
         )}
       </div>
+
+      <TareaModal
+        open={modalTarea !== null}
+        onOpenChange={(v) => !v && setModalTarea(null)}
+        tarea={activeTarea}
+        proyectoId={activeProyectoId}
+        workspaceId={currentWorkspace?.id ?? ''}
+        tags={tags}
+        proyectos={proyectos}
+        onSaved={handleSaved}
+        onDeleted={handleDeleted}
+      />
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from 'react'
 import { api, getErrorMessage } from '@/lib/api'
-import type { EstadoKanban, EstadoPago, Prioridad, Tag, Tarea } from '@/types'
+import type { EstadoKanban, EstadoPago, Prioridad, Proyecto, Tag, Tarea } from '@/types'
 import { today } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -37,6 +37,7 @@ interface TareaModalProps {
   proyectoId: string
   workspaceId: string
   tags: Tag[]
+  proyectos?: Proyecto[]
   onSaved: (tarea: Tarea) => void
   onDeleted?: (tareaId: string) => void
 }
@@ -74,11 +75,13 @@ export function TareaModal({
   proyectoId,
   workspaceId,
   tags,
+  proyectos,
   onSaved,
   onDeleted,
 }: TareaModalProps) {
   const isEdit = !!tarea
   const [form, setForm] = useState<FormState>(emptyForm())
+  const [selectedProyectoId, setSelectedProyectoId] = useState('')
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -88,8 +91,11 @@ export function TareaModal({
   const fileRef = useRef<HTMLInputElement>(null)
   const pendingFileRef = useRef<File | null>(null)
 
+  const efectiveProyectoId = proyectoId || selectedProyectoId
+
   useEffect(() => {
     if (open) {
+      setSelectedProyectoId(tarea?.proyecto_id ?? '')
       if (tarea) {
         setForm({
           descripcion: tarea.descripcion,
@@ -133,7 +139,7 @@ export function TareaModal({
     setUploading(true)
     try {
       const { data } = await api.post<Tarea>(
-        `/workspaces/${workspaceId}/proyectos/${proyectoId}/tareas/${tareaId}/upload`,
+        `/workspaces/${workspaceId}/proyectos/${efectiveProyectoId}/tareas/${tareaId}/upload`,
         formData,
         { headers: { 'Content-Type': 'multipart/form-data' } },
       )
@@ -148,8 +154,9 @@ export function TareaModal({
   }
 
   const handleSave = async () => {
-    if (!form.descripcion.trim()) {
-      setDescError(true)
+    if (!form.descripcion.trim()) { setDescError(true); return }
+    if (!efectiveProyectoId) {
+      toast({ title: 'Selecciona un proyecto', variant: 'destructive' })
       return
     }
     setSaving(true)
@@ -170,13 +177,13 @@ export function TareaModal({
       let savedTarea: Tarea
       if (isEdit && tarea) {
         const { data } = await api.put<Tarea>(
-          `/workspaces/${workspaceId}/proyectos/${proyectoId}/tareas/${tarea.id}`,
+          `/workspaces/${workspaceId}/proyectos/${efectiveProyectoId}/tareas/${tarea.id}`,
           payload,
         )
         savedTarea = data
       } else {
         const { data } = await api.post<Tarea>(
-          `/workspaces/${workspaceId}/proyectos/${proyectoId}/tareas`,
+          `/workspaces/${workspaceId}/proyectos/${efectiveProyectoId}/tareas`,
           payload,
         )
         savedTarea = data
@@ -201,7 +208,7 @@ export function TareaModal({
     if (!tarea) return
     try {
       await api.delete(
-        `/workspaces/${workspaceId}/proyectos/${proyectoId}/tareas/${tarea.id}`,
+        `/workspaces/${workspaceId}/proyectos/${efectiveProyectoId}/tareas/${tarea.id}`,
       )
       onDeleted?.(tarea.id)
       onOpenChange(false)
@@ -222,6 +229,23 @@ export function TareaModal({
           </DialogHeader>
 
           <div className="space-y-3 overflow-y-auto flex-1 pr-1">
+            {/* Selector de proyecto (solo desde bitácora) */}
+            {proyectos && (
+              <div className="space-y-1.5">
+                <Label>Proyecto <span className="text-destructive">*</span></Label>
+                <Select value={selectedProyectoId} onValueChange={setSelectedProyectoId} disabled={isEdit}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona un proyecto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {proyectos.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {/* Descripción */}
             <div className="space-y-1.5">
               <Label>
