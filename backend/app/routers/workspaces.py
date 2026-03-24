@@ -10,6 +10,7 @@ from app.core.dependencies import get_current_user, get_workspace_member
 from app.database import get_session
 from app.models import (
     Configuracion,
+    Plan,
     RolWorkspace,
     SMTPConfig,
     User,
@@ -18,6 +19,9 @@ from app.models import (
     WorkspaceMember,
 )
 from app.schemas import (
+    CreateAndAddUserOut,
+    CreateAndAddUserRequest,
+    DirectAddMemberRequest,
     InviteRequest,
     UpdateMemberRolRequest,
     UserOut,
@@ -221,6 +225,158 @@ async def remove_member(
 
     await session.delete(target)
     await session.commit()
+
+
+# ── Admin direct management ───────────────────────────────────────────────────
+
+@router.post("/{workspace_id}/members/direct-add", response_model=WorkspaceMemberOut, status_code=status.HTTP_201_CREATED)
+async def direct_add_member(
+    workspace_id: uuid.UUID,
+    data: DirectAddMemberRequest,
+    current_user: User = Depends(get_current_user),
+    member=Depends(get_workspace_member),
+    session: AsyncSession = Depends(get_session),
+):
+    if member.rol not in (RolWorkspace.owner, RolWorkspace.admin):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin permisos")
+
+    await check_limit(session, current_user, ResourceType.miembro, workspace_id=workspace_id)
+
+    user_result = await session.exec(select(User).where(User.email == data.email))
+    target_user = user_result.first()
+    if not target_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No existe ningún usuario con ese email")
+
+    already = await session.exec(
+        select(WorkspaceMember).where(
+            WorkspaceMember.workspace_id == workspace_id,
+            WorkspaceMember.user_id == target_user.id,
+        )
+    )
+    if already.first():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El usuario ya es miembro de este workspace")
+
+    new_member = WorkspaceMember(
+        workspace_id=workspace_id,
+        user_id=target_user.id,
+        rol=data.rol,
+        invited_by=current_user.id,
+    )
+    session.add(new_member)
+    await session.commit()
+    await session.refresh(new_member)
+    return WorkspaceMemberOut(
+        id=new_member.id,
+        workspace_id=new_member.workspace_id,
+        user_id=new_member.user_id,
+        rol=new_member.rol,
+        created_at=new_member.created_at,
+        user=UserPublicOut.model_validate(target_user),
+    )
+
+
+@router.post("/{workspace_id}/members/create-user", response_model=CreateAndAddUserOut, status_code=status.HTTP_201_CREATED)
+async def create_and_add_user(
+    workspace_id: uuid.UUID,
+    data: CreateAndAddUserRequest,
+    current_user: User = Depends(get_current_user),
+    member=Depends(get_workspace_member),
+    session: AsyncSession = Depends(get_session),
+):
+    if member.rol not in (RolWorkspace.owner, RolWorkspace.admin):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin permisos")
+
+    await check_limit(session, current_user, ResourceType.miembro, workspace_id=workspace_id)
+
+    existing = await session.exec(select(User).where(User.email == data.email))
+    if existing.first():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ya existe un usuario con ese email")
+
+    import string
+    from app.core.security import hash_password
+    alphabet = string.ascii_letters + string.digits + "!@#$%"
+    temp_password = (
+        secrets.choice(string.ascii_uppercase)
+        + secrets.choice(string.digits)
+        + secrets.choice("!@#$%")
+        + "".join(secrets.choice(alphabet) for _ in range(9))
+    )
+
+    default_plan = await session.exec(
+        select(Plan).where(Plan.es_default == True)
+    )
+    plan = default_plan.first()
+
+    new_user = User(
+        email=data.email,
+        nombre=data.nombre,
+        password_hash=hash_password(temp_password),
+        plan_id=plan.id if plan else None,
+        is_active=True,
+    )
+    session.add(new_user)
+    await session.flush()
+
+    new_member = WorkspaceMember(
+        workspace_id=workspace_id,
+        user_id=new_user.id,
+        rol=data.rol,
+        invited_by=current_user.id,
+    )
+    session.add(new_member)
+    await session.commit()
+    await session.refresh(new_user)
+
+    return CreateAndAddUserOut(
+        user=UserPublicOut.model_validate(new_user),
+        temp_password=temp_password,
+    )
+
+
+@router.put("/{workspace_id}/members/{user_id}/password", response_model=dict)
+async def reset_member_password(
+    workspace_id: uuid.UUID,
+    user_id: uuid.UUID,
+    member=Depends(get_workspace_member),
+    session: AsyncSession = Depends(get_session),
+):
+    if member.rol not in (RolWorkspace.owner, RolWorkspace.admin):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin permisos")
+
+    target_member = await session.exec(
+        select(WorkspaceMember).where(
+            WorkspaceMember.workspace_id == workspace_id,
+            WorkspaceMember.user_id == user_id,
+        )
+    )
+    wm = target_member.first()
+    if not wm:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Miembro no encontrado")
+
+    if wm.rol == RolWorkspace.owner and member.rol != RolWorkspace.owner:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No puedes cambiar la contraseña del owner")
+
+    user_result = await session.exec(select(User).where(User.id == user_id))
+    target_user = user_result.first()
+    if not target_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+
+    if target_user.is_superadmin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No puedes cambiar la contraseña de un superadmin")
+
+    import string
+    from app.core.security import hash_password
+    alphabet = string.ascii_letters + string.digits + "!@#$%"
+    new_password = (
+        secrets.choice(string.ascii_uppercase)
+        + secrets.choice(string.digits)
+        + secrets.choice("!@#$%")
+        + "".join(secrets.choice(alphabet) for _ in range(9))
+    )
+    target_user.password_hash = hash_password(new_password)
+    session.add(target_user)
+    await session.commit()
+    return {"new_password": new_password}
 
 
 # ── Invites ───────────────────────────────────────────────────────────────────

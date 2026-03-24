@@ -23,6 +23,9 @@ import {
   UserPlus,
   Trash2,
   Crown,
+  KeyRound,
+  Copy,
+  Check,
 } from 'lucide-react'
 import { toast } from '@/components/ui/use-toast'
 
@@ -38,6 +41,21 @@ export default function WorkspacesPage() {
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRol, setInviteRol] = useState<RolWorkspace>('member')
   const [removingMember, setRemovingMember] = useState<WorkspaceMember | null>(null)
+
+  // Direct add
+  const [directAddOpen, setDirectAddOpen] = useState(false)
+  const [directEmail, setDirectEmail] = useState('')
+  const [directRol, setDirectRol] = useState<RolWorkspace>('member')
+
+  // Create user
+  const [createUserOpen, setCreateUserOpen] = useState(false)
+  const [newUserEmail, setNewUserEmail] = useState('')
+  const [newUserNombre, setNewUserNombre] = useState('')
+  const [newUserRol, setNewUserRol] = useState<RolWorkspace>('member')
+
+  // Password dialog
+  const [tempPassword, setTempPassword] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     fetchWorkspaces()
@@ -92,6 +110,68 @@ export default function WorkspacesPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleDirectAdd = async () => {
+    if (!directEmail || !currentWorkspace) return
+    setSaving(true)
+    try {
+      const { data } = await api.post<WorkspaceMember>(
+        `/workspaces/${currentWorkspace.id}/members/direct-add`,
+        { email: directEmail, rol: directRol },
+      )
+      setMembers((m) => [...m, data])
+      setDirectAddOpen(false)
+      setDirectEmail('')
+      setDirectRol('member')
+      toast({ title: 'Usuario añadido al workspace' })
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleCreateUser = async () => {
+    if (!newUserEmail || !newUserNombre || !currentWorkspace) return
+    setSaving(true)
+    try {
+      const { data } = await api.post<{ user: WorkspaceMember['user']; temp_password: string }>(
+        `/workspaces/${currentWorkspace.id}/members/create-user`,
+        { email: newUserEmail, nombre: newUserNombre, rol: newUserRol },
+      )
+      await api.get<WorkspaceMember[]>(`/workspaces/${currentWorkspace.id}/members`)
+        .then(({ data: members }) => setMembers(members))
+      setCreateUserOpen(false)
+      setNewUserEmail('')
+      setNewUserNombre('')
+      setNewUserRol('member')
+      setTempPassword(data.temp_password)
+      toast({ title: 'Usuario creado y añadido al workspace' })
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleResetPassword = async (userId: string) => {
+    if (!currentWorkspace) return
+    try {
+      const { data } = await api.put<{ new_password: string }>(
+        `/workspaces/${currentWorkspace.id}/members/${userId}/password`,
+      )
+      setTempPassword(data.new_password)
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    }
+  }
+
+  const handleCopy = () => {
+    if (!tempPassword) return
+    navigator.clipboard.writeText(tempPassword)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   const handleRemoveMember = async (memberId: string) => {
@@ -159,10 +239,20 @@ export default function WorkspacesPage() {
               Miembros — {currentWorkspace.nombre}
             </h2>
             {canManage && (
-              <Button size="sm" variant="outline" className="h-8" onClick={() => setInviteOpen(true)}>
-                <UserPlus className="mr-1.5 h-3.5 w-3.5" />
-                Invitar
-              </Button>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" className="h-8" onClick={() => setInviteOpen(true)}>
+                  <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+                  Invitar
+                </Button>
+                <Button size="sm" variant="outline" className="h-8" onClick={() => setDirectAddOpen(true)}>
+                  <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+                  Añadir directo
+                </Button>
+                <Button size="sm" variant="outline" className="h-8" onClick={() => setCreateUserOpen(true)}>
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  Crear usuario
+                </Button>
+              </div>
             )}
           </div>
 
@@ -202,14 +292,25 @@ export default function WorkspacesPage() {
                     <span className="text-xs text-muted-foreground capitalize">{m.rol}</span>
                   )}
                   {canManage && m.rol !== 'owner' && m.user_id !== user?.id && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                      onClick={() => setRemovingMember(m)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-primary"
+                        title="Cambiar contraseña"
+                        onClick={() => handleResetPassword(m.user_id)}
+                      >
+                        <KeyRound className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        onClick={() => setRemovingMember(m)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </>
                   )}
                 </div>
               ))}
@@ -246,6 +347,113 @@ export default function WorkspacesPage() {
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Crear
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Añadir usuario existente directo */}
+      <Dialog open={directAddOpen} onOpenChange={(v) => { if (!v) { setDirectAddOpen(false); setDirectEmail(''); setDirectRol('member') } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Añadir usuario existente</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={directEmail}
+                onChange={(e) => setDirectEmail(e.target.value)}
+                placeholder="email@ejemplo.com"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Rol</Label>
+              <Select value={directRol} onValueChange={(v) => setDirectRol(v as RolWorkspace)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="member">Member</SelectItem>
+                  <SelectItem value="viewer">Viewer</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDirectAddOpen(false); setDirectEmail(''); setDirectRol('member') }}>Cancelar</Button>
+            <Button onClick={handleDirectAdd} disabled={saving || !directEmail}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Añadir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Crear usuario nuevo */}
+      <Dialog open={createUserOpen} onOpenChange={(v) => { if (!v) { setCreateUserOpen(false); setNewUserEmail(''); setNewUserNombre(''); setNewUserRol('member') } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Crear usuario</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Nombre</Label>
+              <Input
+                value={newUserNombre}
+                onChange={(e) => setNewUserNombre(e.target.value)}
+                placeholder="Nombre completo"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={newUserEmail}
+                onChange={(e) => setNewUserEmail(e.target.value)}
+                placeholder="email@ejemplo.com"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Rol</Label>
+              <Select value={newUserRol} onValueChange={(v) => setNewUserRol(v as RolWorkspace)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="member">Member</SelectItem>
+                  <SelectItem value="viewer">Viewer</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setCreateUserOpen(false); setNewUserEmail(''); setNewUserNombre(''); setNewUserRol('member') }}>Cancelar</Button>
+            <Button onClick={handleCreateUser} disabled={saving || !newUserEmail || !newUserNombre}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Crear
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Mostrar contraseña temporal */}
+      <Dialog open={!!tempPassword} onOpenChange={(v) => { if (!v) { setTempPassword(null); setCopied(false) } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Contraseña temporal</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Copia esta contraseña ahora. No se mostrará de nuevo.</p>
+          <div className="flex items-center gap-2 bg-muted rounded-md px-3 py-2">
+            <code className="flex-1 text-sm font-mono select-all">{tempPassword}</code>
+            <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={handleCopy}>
+              {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => { setTempPassword(null); setCopied(false) }}>Cerrar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

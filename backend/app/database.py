@@ -1,3 +1,4 @@
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
@@ -27,5 +28,9 @@ async def get_session():
 
 
 async def create_db_and_tables():
-    async with engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(lambda c: SQLModel.metadata.create_all(c, checkfirst=True))
+    except IntegrityError:
+        # Race condition: otro worker ya creó los tipos ENUM simultáneamente — ignorar
+        pass

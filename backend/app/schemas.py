@@ -210,6 +210,22 @@ class UpdateMemberRolRequest(BaseModel):
     rol: RolWorkspace
 
 
+class DirectAddMemberRequest(BaseModel):
+    email: EmailStr
+    rol: RolWorkspace = RolWorkspace.member
+
+
+class CreateAndAddUserRequest(BaseModel):
+    email: EmailStr
+    nombre: str
+    rol: RolWorkspace = RolWorkspace.member
+
+
+class CreateAndAddUserOut(BaseModel):
+    user: UserPublicOut
+    temp_password: str
+
+
 class AssignPlanRequest(BaseModel):
     plan_id: uuid.UUID
 
