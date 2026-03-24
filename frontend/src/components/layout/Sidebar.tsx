@@ -42,7 +42,7 @@ export default function Sidebar({ className }: SidebarProps) {
       )}
     >
       <div className="h-14 flex items-center px-4 border-b border-border">
-        <img src="/logo.png" alt="Klyp" className="h-10 w-auto rounded-lg" />
+        <img src="/logo.png" alt="Klyp" className="h-10 w-auto" />
       </div>
 
       <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">

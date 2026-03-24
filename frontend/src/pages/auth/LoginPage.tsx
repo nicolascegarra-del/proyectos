@@ -48,7 +48,7 @@ export default function LoginPage() {
   return (
     <div className="w-full max-w-sm space-y-6">
       <div className="space-y-1 text-center">
-        <img src="/logo.png" alt="Klyp" className="h-28 w-auto mx-auto rounded-xl" />
+        <img src="/logo.png" alt="Klyp" className="h-28 w-auto mx-auto" />
         <p className="text-sm text-muted-foreground">Inicia sesión en tu cuenta</p>
       </div>
 
