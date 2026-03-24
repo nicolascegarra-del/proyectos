@@ -54,7 +54,7 @@ export default function RegisterPage() {
   return (
     <div className="w-full max-w-sm space-y-6">
       <div className="space-y-1 text-center">
-        <h1 className="text-2xl font-bold tracking-tight">Klyp</h1>
+        <img src="/logo.png" alt="Klyp" className="h-14 w-auto mx-auto" />
         <p className="text-sm text-muted-foreground">Crea tu cuenta gratis</p>
       </div>
 

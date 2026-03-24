@@ -27,6 +27,10 @@ export default function ProyectosPage() {
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [newClientOpen, setNewClientOpen] = useState(false)
+  const [newClientNombre, setNewClientNombre] = useState('')
+  const [newClientEmail, setNewClientEmail] = useState('')
+  const [savingClient, setSavingClient] = useState(false)
 
   const [form, setForm] = useState({
     nombre: '',
@@ -85,6 +89,27 @@ export default function ProyectosPage() {
       toast({ title: isLimitError(err) ? 'Límite de plan alcanzado' : 'No se pudo crear el proyecto', description: msg, variant: 'destructive' })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleCreateCliente = async () => {
+    if (!newClientNombre || !currentWorkspace) return
+    setSavingClient(true)
+    try {
+      const { data } = await api.post<Cliente>(
+        `/workspaces/${currentWorkspace.id}/clientes`,
+        { nombre: newClientNombre, email: newClientEmail || null },
+      )
+      setClientes((c) => [...c, data])
+      setForm((f) => ({ ...f, cliente_id: data.id }))
+      setNewClientOpen(false)
+      setNewClientNombre('')
+      setNewClientEmail('')
+      toast({ title: 'Cliente creado' })
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    } finally {
+      setSavingClient(false)
     }
   }
 
@@ -171,16 +196,21 @@ export default function ProyectosPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Cliente</Label>
-              <Select value={form.cliente_id} onValueChange={(v) => setForm((f) => ({ ...f, cliente_id: v }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona un cliente" />
-                </SelectTrigger>
-                <SelectContent>
-                  {clientes.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2">
+                <Select value={form.cliente_id} onValueChange={(v) => setForm((f) => ({ ...f, cliente_id: v }))}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Selecciona un cliente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clientes.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button type="button" variant="outline" size="icon" title="Nuevo cliente" onClick={() => setNewClientOpen(true)}>
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -205,6 +235,30 @@ export default function ProyectosPage() {
             <Button variant="outline" onClick={() => { setModalOpen(false); resetForm() }}>Cancelar</Button>
             <Button onClick={handleCreate} disabled={saving || !form.nombre || !form.cliente_id}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Crear
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={newClientOpen} onOpenChange={(v) => { if (!v) { setNewClientOpen(false); setNewClientNombre(''); setNewClientEmail('') } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Nuevo cliente</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Nombre</Label>
+              <Input value={newClientNombre} onChange={(e) => setNewClientNombre(e.target.value)} placeholder="Nombre del cliente" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Email <span className="text-muted-foreground text-xs">(opcional)</span></Label>
+              <Input type="email" value={newClientEmail} onChange={(e) => setNewClientEmail(e.target.value)} placeholder="cliente@email.com" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setNewClientOpen(false); setNewClientNombre(''); setNewClientEmail('') }}>Cancelar</Button>
+            <Button onClick={handleCreateCliente} disabled={savingClient || !newClientNombre}>
+              {savingClient && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Crear
             </Button>
           </DialogFooter>
