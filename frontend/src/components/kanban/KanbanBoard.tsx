@@ -39,7 +39,7 @@ function DroppableColumn({
   const { setNodeRef } = useDroppable({ id: col.id })
 
   return (
-    <div className="flex-shrink-0 w-64 flex flex-col gap-2">
+    <div className="flex-1 min-w-[160px] flex flex-col gap-2">
       <div className="flex items-center justify-between px-1">
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           {col.label}
