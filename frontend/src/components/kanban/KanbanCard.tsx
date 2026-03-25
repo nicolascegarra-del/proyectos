@@ -1,8 +1,8 @@
-import { useDraggable } from '@dnd-kit/core'
+import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { EstadoKanban, Tarea, Tag } from '@/types'
 import { cn, formatHoras } from '@/lib/utils'
-import { Lock, Clock, Github, Paperclip, GripVertical, CheckCheck } from 'lucide-react'
+import { Lock, Clock, Github, Paperclip, GripVertical, CheckCheck, ListChecks } from 'lucide-react'
 
 const ESTADO_PAGO_COLORS = {
   pendiente: 'text-yellow-500',
@@ -38,14 +38,15 @@ interface KanbanCardProps {
 }
 
 export function KanbanCard({ tarea, tag, onClick, onMarkDone }: KanbanCardProps) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: tarea.id,
     disabled: tarea.is_locked,
   })
 
-  const style = transform
-    ? { transform: CSS.Translate.toString(transform) }
-    : undefined
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  }
 
   const isDone = tarea.estado_kanban === 'done'
 
@@ -111,6 +112,15 @@ export function KanbanCard({ tarea, tag, onClick, onMarkDone }: KanbanCardProps)
               {tarea.complejidad === 9 ? 'DIVIDIR' : `C${tarea.complejidad}`}
             </span>
           )}
+        </div>
+      )}
+
+      {(tarea.subtareas_total ?? 0) > 0 && (
+        <div className="flex items-center gap-1">
+          <ListChecks className="h-3 w-3 text-muted-foreground" />
+          <span className={`text-[10px] ${tarea.subtareas_completadas === tarea.subtareas_total ? 'text-green-400' : 'text-muted-foreground'}`}>
+            {tarea.subtareas_completadas}/{tarea.subtareas_total}
+          </span>
         </div>
       )}
 

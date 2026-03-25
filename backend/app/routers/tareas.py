@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+import sqlalchemy
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +21,7 @@ from app.models import (
     Proyecto,
     RetainerCiclo,
     RolWorkspace,
+    Subtarea,
     Tag,
     Tarea,
     User,
@@ -41,6 +43,22 @@ async def _get_proyecto_or_404(workspace_id: uuid.UUID, proyecto_id: uuid.UUID, 
     if not proyecto:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proyecto no encontrado")
     return proyecto
+
+
+async def _get_subtarea_counts(tarea_ids: list[uuid.UUID], session: AsyncSession) -> dict[uuid.UUID, tuple[int, int]]:
+    """Returns {tarea_id: (total, completadas)} for the given tarea ids."""
+    if not tarea_ids:
+        return {}
+    rows = await session.exec(
+        select(
+            Subtarea.tarea_id,
+            func.count(Subtarea.id).label("total"),
+            func.sum(func.cast(Subtarea.completada, sqlalchemy.Integer)).label("hechas"),
+        )
+        .where(Subtarea.tarea_id.in_(tarea_ids))
+        .group_by(Subtarea.tarea_id)
+    )
+    return {row.tarea_id: (row.total, int(row.hechas or 0)) for row in rows}
 
 
 async def _check_alerts(proyecto: Proyecto, session: AsyncSession) -> tuple[bool, bool]:
@@ -87,7 +105,16 @@ async def list_tareas(
     result = await session.exec(
         select(Tarea).where(Tarea.proyecto_id == proyecto_id).offset(offset).limit(limit)
     )
-    return result.all()
+    tareas = result.all()
+    counts = await _get_subtarea_counts([t.id for t in tareas], session)
+    outs = []
+    for t in tareas:
+        out = TareaOut.model_validate(t)
+        total, hechas = counts.get(t.id, (0, 0))
+        out.subtareas_total = total
+        out.subtareas_completadas = hechas
+        outs.append(out)
+    return outs
 
 
 @router.post("", response_model=TareaOut, status_code=status.HTTP_201_CREATED)
@@ -142,7 +169,12 @@ async def get_tarea(
     tarea = result.first()
     if not tarea:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tarea no encontrada")
-    return tarea
+    counts = await _get_subtarea_counts([tarea.id], session)
+    out = TareaOut.model_validate(tarea)
+    total, hechas = counts.get(tarea.id, (0, 0))
+    out.subtareas_total = total
+    out.subtareas_completadas = hechas
+    return out
 
 
 @router.put("/{tarea_id}", response_model=TareaOut)
@@ -204,9 +236,13 @@ async def update_tarea(
             )
 
     alerta_horas, alerta_retainer = await _check_alerts(proyecto, session)
+    counts = await _get_subtarea_counts([tarea.id], session)
     out = TareaOut.model_validate(tarea)
     out.alerta_horas = alerta_horas
     out.alerta_retainer = alerta_retainer
+    total, hechas = counts.get(tarea.id, (0, 0))
+    out.subtareas_total = total
+    out.subtareas_completadas = hechas
     return out
 
 

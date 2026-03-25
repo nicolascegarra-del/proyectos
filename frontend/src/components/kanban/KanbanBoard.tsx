@@ -11,6 +11,7 @@ import {
   useDroppable,
   DragOverEvent,
 } from '@dnd-kit/core'
+import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import type { EstadoKanban, Tag, Tarea } from '@/types'
 import { KanbanCard } from './KanbanCard'
 import { cn } from '@/lib/utils'
@@ -39,6 +40,7 @@ function DroppableColumn({
   onMarkDone?: (tareaId: string, estado: EstadoKanban) => void
 }) {
   const { setNodeRef } = useDroppable({ id: col.id })
+  const ids = tareas.map((t) => t.id)
 
   return (
     <div className="flex-1 min-w-[160px] flex flex-col gap-2">
@@ -58,21 +60,23 @@ function DroppableColumn({
           isOver ? 'bg-primary/10 border-primary/40' : 'bg-muted/20 border-border/50',
         )}
       >
-        {tareas.length === 0 ? (
-          <div className="flex items-center justify-center h-20 text-sm text-muted-foreground border-2 border-dashed rounded-lg">
-            Sin tareas
-          </div>
-        ) : (
-          tareas.map((tarea) => (
-            <KanbanCard
-              key={tarea.id}
-              tarea={tarea}
-              tag={tarea.tag_id ? tags.get(tarea.tag_id) : undefined}
-              onClick={onCardClick}
-              onMarkDone={onMarkDone}
-            />
-          ))
-        )}
+        <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+          {tareas.length === 0 ? (
+            <div className="flex items-center justify-center h-20 text-sm text-muted-foreground border-2 border-dashed rounded-lg">
+              Sin tareas
+            </div>
+          ) : (
+            tareas.map((tarea) => (
+              <KanbanCard
+                key={tarea.id}
+                tarea={tarea}
+                tag={tarea.tag_id ? tags.get(tarea.tag_id) : undefined}
+                onClick={onCardClick}
+                onMarkDone={onMarkDone}
+              />
+            ))
+          )}
+        </SortableContext>
       </div>
     </div>
   )
@@ -82,10 +86,11 @@ interface KanbanBoardProps {
   tareas: Tarea[]
   tags: Tag[]
   onMoveCard: (tareaId: string, newEstado: EstadoKanban) => Promise<void>
+  onReorderCards: (col: EstadoKanban, orderedIds: string[]) => void
   onCardClick?: (tarea: Tarea) => void
 }
 
-export function KanbanBoard({ tareas, tags, onMoveCard, onCardClick }: KanbanBoardProps) {
+export function KanbanBoard({ tareas, tags, onMoveCard, onReorderCards, onCardClick }: KanbanBoardProps) {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [overColId, setOverColId] = useState<EstadoKanban | null>(null)
 
@@ -121,12 +126,37 @@ export function KanbanBoard({ tareas, tags, onMoveCard, onCardClick }: KanbanBoa
 
     if (!over) return
 
-    const targetColId = over.id as EstadoKanban
-    if (!COLUMNS.some((c) => c.id === targetColId)) return
+    const activeId = active.id as string
+    const overId = over.id as string
 
-    const currentEstado = tareas.find((t) => t.id === active.id)?.estado_kanban
-    if (targetColId !== currentEstado) {
-      onMoveCard(active.id as string, targetColId)
+    const activeTarea = tareas.find((t) => t.id === activeId)
+    if (!activeTarea) return
+
+    // Dropped over a column header (droppable)
+    if (COLUMNS.some((c) => c.id === overId)) {
+      if (overId !== activeTarea.estado_kanban) {
+        onMoveCard(activeId, overId as EstadoKanban)
+      }
+      return
+    }
+
+    // Dropped over another card (sortable) — same column reorder
+    const overTarea = tareas.find((t) => t.id === overId)
+    if (!overTarea) return
+
+    if (activeTarea.estado_kanban !== overTarea.estado_kanban) {
+      // Moved to a different column by dropping on a card
+      onMoveCard(activeId, overTarea.estado_kanban)
+    } else {
+      // Reorder within the same column
+      const col = activeTarea.estado_kanban
+      const colTareas = tareas.filter((t) => t.estado_kanban === col)
+      const ids = colTareas.map((t) => t.id)
+      const oldIndex = ids.indexOf(activeId)
+      const newIndex = ids.indexOf(overId)
+      if (oldIndex !== newIndex) {
+        onReorderCards(col, arrayMove(ids, oldIndex, newIndex))
+      }
     }
   }
 

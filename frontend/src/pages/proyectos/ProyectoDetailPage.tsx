@@ -58,7 +58,7 @@ export default function ProyectoDetailPage() {
         api.get<Gasto[]>(`/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/gastos`),
       ])
       setProyecto(pRes.data)
-      setTareas(tRes.data)
+      setTareas(applyKanbanOrder(tRes.data))
       setTags(tagRes.data)
       setGastos(gRes.data)
 
@@ -168,6 +168,46 @@ export default function ProyectoDetailPage() {
       await enqueueSync('tarea', tareaId, 'update', { estado_kanban: newEstado })
       incrementPending()
     }
+  }
+
+  const getKanbanOrder = (): Record<string, string[]> => {
+    try {
+      return JSON.parse(localStorage.getItem(`kanban_order_${proyectoId}`) ?? '{}')
+    } catch {
+      return {}
+    }
+  }
+
+  const saveKanbanOrder = (col: EstadoKanban, orderedIds: string[]) => {
+    const current = getKanbanOrder()
+    localStorage.setItem(`kanban_order_${proyectoId}`, JSON.stringify({ ...current, [col]: orderedIds }))
+  }
+
+  const applyKanbanOrder = (rawTareas: Tarea[]): Tarea[] => {
+    const order = getKanbanOrder()
+    const cols = ['backlog', 'todo', 'en_progreso', 'revision', 'done'] as const
+    const result: Tarea[] = []
+    for (const col of cols) {
+      const colTareas = rawTareas.filter((t) => t.estado_kanban === col)
+      const ids = order[col]
+      if (!ids) { result.push(...colTareas); continue }
+      const indexed = new Map(colTareas.map((t) => [t.id, t]))
+      const ordered = ids.flatMap((id) => indexed.has(id) ? [indexed.get(id)!] : [])
+      const rest = colTareas.filter((t) => !ids.includes(t.id))
+      result.push(...ordered, ...rest)
+    }
+    return result
+  }
+
+  const handleReorderCards = (col: EstadoKanban, orderedIds: string[]) => {
+    saveKanbanOrder(col, orderedIds)
+    setTareas((prev) => {
+      const others = prev.filter((t) => t.estado_kanban !== col)
+      const colTareas = prev.filter((t) => t.estado_kanban === col)
+      const indexed = new Map(colTareas.map((t) => [t.id, t]))
+      const reordered = orderedIds.flatMap((id) => indexed.has(id) ? [indexed.get(id)!] : [])
+      return [...others, ...reordered]
+    })
   }
 
   const openGastoModal = (g: Gasto | 'new') => {
@@ -334,6 +374,7 @@ export default function ProyectoDetailPage() {
             tareas={tareas.filter((t) => !t.es_backlog)}
             tags={tags}
             onMoveCard={handleMoveCard}
+            onReorderCards={handleReorderCards}
             onCardClick={(t) => setModalTarea(t)}
           />
         </TabsContent>

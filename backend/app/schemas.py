@@ -288,6 +288,13 @@ class ClienteOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ClienteStatsOut(BaseModel):
+    proyectos: int
+    tareas: int
+    horas_totales: float
+    ingresos_totales: float
+
+
 # ── Proyecto ──────────────────────────────────────────────────────────────────
 
 class ProyectoCreate(BaseModel):
@@ -454,6 +461,8 @@ class TareaOut(BaseModel):
     updated_at: datetime
     alerta_horas: bool = False
     alerta_retainer: bool = False
+    subtareas_total: int = 0
+    subtareas_completadas: int = 0
     model_config = {"from_attributes": True}
 
 

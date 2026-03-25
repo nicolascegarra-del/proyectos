@@ -122,6 +122,15 @@ export interface Tarea {
   updated_at: string
   alerta_horas?: boolean
   alerta_retainer?: boolean
+  subtareas_total?: number
+  subtareas_completadas?: number
+}
+
+export interface ClienteStats {
+  proyectos: number
+  tareas: number
+  horas_totales: number
+  ingresos_totales: number
 }
 
 export interface Subtarea {

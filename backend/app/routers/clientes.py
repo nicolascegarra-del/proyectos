@@ -2,13 +2,14 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from app.core.dependencies import get_current_user, get_workspace_member
 from app.database import get_session
-from app.models import Cliente, RolWorkspace, User
-from app.schemas import ClienteCreate, ClienteOut, ClienteUpdate
+from app.models import Cliente, Proyecto, RolWorkspace, Tarea, User
+from app.schemas import ClienteCreate, ClienteOut, ClienteStatsOut, ClienteUpdate
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/clientes", tags=["clientes"])
 
@@ -108,3 +109,45 @@ async def delete_cliente(
 
     await session.delete(cliente)
     await session.commit()
+
+
+@router.get("/{cliente_id}/stats", response_model=ClienteStatsOut)
+async def get_cliente_stats(
+    workspace_id: uuid.UUID,
+    cliente_id: uuid.UUID,
+    _=Depends(get_workspace_member),
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.exec(
+        select(Cliente).where(Cliente.id == cliente_id, Cliente.workspace_id == workspace_id)
+    )
+    if not result.first():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cliente no encontrado")
+
+    proyectos_result = await session.exec(
+        select(Proyecto).where(Proyecto.cliente_id == cliente_id, Proyecto.workspace_id == workspace_id)
+    )
+    proyectos = proyectos_result.all()
+    proyecto_ids = [p.id for p in proyectos]
+    tarifa_map = {p.id: p.tarifa_hora for p in proyectos}
+
+    if not proyecto_ids:
+        return ClienteStatsOut(proyectos=0, tareas=0, horas_totales=0.0, ingresos_totales=0.0)
+
+    tareas_result = await session.exec(
+        select(Tarea.proyecto_id, func.count(Tarea.id).label("n"), func.sum(Tarea.horas).label("h"))
+        .where(Tarea.proyecto_id.in_(proyecto_ids))
+        .group_by(Tarea.proyecto_id)
+    )
+    tareas_rows = tareas_result.all()
+
+    total_tareas = sum(row.n for row in tareas_rows)
+    total_horas = sum(row.h or 0 for row in tareas_rows)
+    total_ingresos = sum((row.h or 0) * tarifa_map.get(row.proyecto_id, 0) for row in tareas_rows)
+
+    return ClienteStatsOut(
+        proyectos=len(proyectos),
+        tareas=total_tareas,
+        horas_totales=round(total_horas, 2),
+        ingresos_totales=round(total_ingresos, 2),
+    )
