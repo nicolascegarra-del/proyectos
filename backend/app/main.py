@@ -21,6 +21,7 @@ from app.routers import (
     articulos,
     auth,
     clientes,
+    comentarios,
     configuracion,
     dashboard,
     gastos,
@@ -172,6 +173,7 @@ app.include_router(proyectos.router)
 app.include_router(sprints.router)
 app.include_router(tareas.router)
 app.include_router(subtareas.router)
+app.include_router(comentarios.router)
 app.include_router(gastos.router)
 app.include_router(presupuestos.router)
 app.include_router(articulos.router)

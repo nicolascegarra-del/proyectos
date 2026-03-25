@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect } from 'react'
+import { format } from 'date-fns'
 import { api, getErrorMessage } from '@/lib/api'
-import type { EstadoKanban, EstadoPago, Prioridad, Proyecto, Subtarea, Tag, Tarea } from '@/types'
+import type { Comentario, EstadoPago, Prioridad, Proyecto, Sprint, Subtarea, Tag, Tarea } from '@/types'
 import { today } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,20 +16,8 @@ import {
 } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertDialog } from '@/components/ui/alert-dialog'
-import { Check, ChevronDown, ChevronUp, Loader2, Paperclip, Plus, Trash2, X, ExternalLink } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Loader2, MessageSquare, Paperclip, Plus, Trash2, X, ExternalLink } from 'lucide-react'
 import { toast } from '@/components/ui/use-toast'
-
-const COMPLEJIDAD_LABELS: Record<number, string> = {
-  1: '1 — Trivial',
-  2: '2 — Muy fácil',
-  3: '3 — Fácil',
-  4: '4 — Moderado',
-  5: '5 — Medio',
-  6: '6 — Difícil',
-  7: '7 — Muy difícil',
-  8: '8 — Complejo',
-  9: '9 — Dividir tarea',
-}
 
 interface TareaModalProps {
   open: boolean
@@ -37,6 +26,7 @@ interface TareaModalProps {
   proyectoId: string
   workspaceId: string
   tags: Tag[]
+  sprints?: Sprint[]
   proyectos?: Proyecto[]
   onSaved: (tarea: Tarea) => void
   onDeleted?: (tareaId: string) => void
@@ -49,12 +39,11 @@ type FormState = {
   fecha: string
   tag_id: string
   prioridad: string
-  complejidad: string
   github_url: string
   estado_pago: EstadoPago
-  estado_kanban: EstadoKanban
   fecha_inicio: string
   fecha_fin: string
+  sprint_id: string
 }
 
 const emptyForm = (): FormState => ({
@@ -64,12 +53,11 @@ const emptyForm = (): FormState => ({
   fecha: today(),
   tag_id: '',
   prioridad: '',
-  complejidad: '',
   github_url: '',
   estado_pago: 'pendiente',
-  estado_kanban: 'todo',
   fecha_inicio: '',
   fecha_fin: '',
+  sprint_id: '',
 })
 
 export function TareaModal({
@@ -79,6 +67,7 @@ export function TareaModal({
   proyectoId,
   workspaceId,
   tags,
+  sprints,
   proyectos,
   onSaved,
   onDeleted,
@@ -101,6 +90,12 @@ export function TareaModal({
   const [savingSubtarea, setSavingSubtarea] = useState(false)
   const [loadingSubtareas, setLoadingSubtareas] = useState(false)
 
+  // Comentarios
+  const [comentarios, setComentarios] = useState<Comentario[]>([])
+  const [newComentario, setNewComentario] = useState('')
+  const [savingComentario, setSavingComentario] = useState(false)
+  const [loadingComentarios, setLoadingComentarios] = useState(false)
+
   const efectiveProyectoId = proyectoId || selectedProyectoId
 
   useEffect(() => {
@@ -114,25 +109,27 @@ export function TareaModal({
           fecha: tarea.fecha,
           tag_id: tarea.tag_id ?? '',
           prioridad: tarea.prioridad ?? '',
-          complejidad: tarea.complejidad?.toString() ?? '',
           github_url: tarea.github_url ?? '',
           estado_pago: tarea.estado_pago,
-          estado_kanban: tarea.estado_kanban,
           fecha_inicio: tarea.fecha_inicio ?? '',
           fecha_fin: tarea.fecha_fin ?? '',
+          sprint_id: tarea.sprint_id ?? '',
         })
         setArchivoUrl(tarea.archivo_url)
         setShowExtras(!!(tarea.github_url || tarea.archivo_url))
         loadSubtareas(tarea.id, tarea.proyecto_id)
+        loadComentarios(tarea.id, tarea.proyecto_id)
       } else {
         setForm(emptyForm())
         setArchivoUrl(null)
         setShowExtras(false)
         setSubtareas([])
+        setComentarios([])
       }
       setDescError(false)
       pendingFileRef.current = null
       setNewSubtarea('')
+      setNewComentario('')
     }
   }, [open, tarea])
 
@@ -147,6 +144,20 @@ export function TareaModal({
       // silencioso
     } finally {
       setLoadingSubtareas(false)
+    }
+  }
+
+  const loadComentarios = async (tareaId: string, pId: string) => {
+    setLoadingComentarios(true)
+    try {
+      const { data } = await api.get<Comentario[]>(
+        `/workspaces/${workspaceId}/proyectos/${pId}/tareas/${tareaId}/comentarios`,
+      )
+      setComentarios(data)
+    } catch {
+      // silencioso
+    } finally {
+      setLoadingComentarios(false)
     }
   }
 
@@ -190,19 +201,22 @@ export function TareaModal({
     }
     setSaving(true)
     try {
-      const payload = {
+      const payload: Record<string, unknown> = {
         descripcion: form.descripcion,
         descripcion_larga: form.descripcion_larga || null,
         horas: parseFloat(form.horas) || 0,
         fecha: form.fecha,
         tag_id: form.tag_id || null,
         prioridad: (form.prioridad as Prioridad) || null,
-        complejidad: form.complejidad ? parseInt(form.complejidad) : null,
         github_url: form.github_url || null,
         estado_pago: form.estado_pago,
-        estado_kanban: form.estado_kanban,
         fecha_inicio: form.fecha_inicio || null,
         fecha_fin: form.fecha_fin || null,
+      }
+
+      // Sprint only on edit (assign from sprint tab handles new task case)
+      if (isEdit) {
+        payload.sprint_id = form.sprint_id || null
       }
 
       let savedTarea: Tarea
@@ -291,8 +305,36 @@ export function TareaModal({
     }
   }
 
-  const completadas = subtareas.filter((s) => s.completada).length
+  const handleAddComentario = async () => {
+    if (!newComentario.trim() || !tarea) return
+    setSavingComentario(true)
+    try {
+      const { data } = await api.post<Comentario>(
+        `/workspaces/${workspaceId}/proyectos/${efectiveProyectoId}/tareas/${tarea.id}/comentarios`,
+        { texto: newComentario.trim() },
+      )
+      setComentarios((prev) => [...prev, data])
+      setNewComentario('')
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    } finally {
+      setSavingComentario(false)
+    }
+  }
 
+  const handleDeleteComentario = async (c: Comentario) => {
+    if (!tarea) return
+    try {
+      await api.delete(
+        `/workspaces/${workspaceId}/proyectos/${efectiveProyectoId}/tareas/${tarea.id}/comentarios/${c.id}`,
+      )
+      setComentarios((prev) => prev.filter((x) => x.id !== c.id))
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    }
+  }
+
+  const completadas = subtareas.filter((s) => s.completada).length
   const isBusy = saving || uploading
 
   return (
@@ -404,7 +446,6 @@ export function TareaModal({
                       </div>
                     ))
                   )}
-                  {/* Añadir subtarea */}
                   <div className="flex items-center gap-2 mt-1">
                     <Input
                       value={newSubtarea}
@@ -471,7 +512,7 @@ export function TareaModal({
               </div>
             </div>
 
-            {/* Prioridad y Complejidad */}
+            {/* Prioridad y Estado pago */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Prioridad</Label>
@@ -489,24 +530,6 @@ export function TareaModal({
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>Complejidad</Label>
-                <Select value={form.complejidad} onValueChange={(v) => set('complejidad', v === 'none' ? '' : v)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Sin puntuación" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Sin puntuación</SelectItem>
-                    {Object.entries(COMPLEJIDAD_LABELS).map(([val, label]) => (
-                      <SelectItem key={val} value={val}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Estado pago y Kanban */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
                 <Label>Estado pago</Label>
                 <Select value={form.estado_pago} onValueChange={(v) => set('estado_pago', v as EstadoPago)}>
                   <SelectTrigger>
@@ -516,21 +539,6 @@ export function TareaModal({
                     <SelectItem value="pendiente">⏳ Pendiente</SelectItem>
                     <SelectItem value="facturado">💳 Facturado</SelectItem>
                     <SelectItem value="cobrado">✅ Cobrado</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Columna kanban</Label>
-                <Select value={form.estado_kanban} onValueChange={(v) => set('estado_kanban', v as EstadoKanban)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="backlog">Backlog</SelectItem>
-                    <SelectItem value="todo">Por hacer</SelectItem>
-                    <SelectItem value="en_progreso">En progreso</SelectItem>
-                    <SelectItem value="revision">Revisión</SelectItem>
-                    <SelectItem value="done">Hecho</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -557,6 +565,24 @@ export function TareaModal({
               </Select>
             </div>
 
+            {/* Sprint (solo en edición, si hay sprints disponibles) */}
+            {isEdit && sprints && sprints.length > 0 && (
+              <div className="space-y-1.5">
+                <Label>Sprint</Label>
+                <Select value={form.sprint_id} onValueChange={(v) => set('sprint_id', v === 'none' ? '' : v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sin sprint" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin sprint</SelectItem>
+                    {sprints.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>{s.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {/* Extras collapsible: GitHub + Archivo */}
             <div className="border border-border/50 rounded-md overflow-hidden">
               <button
@@ -570,7 +596,6 @@ export function TareaModal({
 
               {showExtras && (
                 <div className="px-3 pb-3 space-y-3 border-t border-border/50 pt-3">
-                  {/* GitHub URL */}
                   <div className="space-y-1.5">
                     <Label>Ruta GitHub (PR, branch, issue...)</Label>
                     <Input
@@ -580,7 +605,6 @@ export function TareaModal({
                     />
                   </div>
 
-                  {/* Archivo adjunto */}
                   <div className="space-y-1.5">
                     <Label>Archivo adjunto</Label>
                     {archivoUrl ? (
@@ -632,6 +656,72 @@ export function TareaModal({
                 </div>
               )}
             </div>
+
+            {/* Comentarios (solo en edición) */}
+            {isEdit && (
+              <div className="border border-border/50 rounded-md overflow-hidden">
+                <div className="flex items-center gap-2 px-3 py-2 bg-muted/30">
+                  <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Comentarios
+                    {comentarios.length > 0 && (
+                      <span className="ml-1.5 text-muted-foreground/60">({comentarios.length})</span>
+                    )}
+                  </span>
+                </div>
+                <div className="px-3 pb-3 pt-2 space-y-3">
+                  {loadingComentarios ? (
+                    <p className="text-xs text-muted-foreground">Cargando...</p>
+                  ) : comentarios.length === 0 ? (
+                    <p className="text-xs text-muted-foreground/60 italic">Sin comentarios todavía</p>
+                  ) : (
+                    comentarios.map((c) => (
+                      <div key={c.id} className="flex items-start gap-2 group/com">
+                        <div className="flex-1 min-w-0 bg-muted/30 rounded-md px-3 py-2">
+                          <p className="text-sm whitespace-pre-wrap break-words">{c.texto}</p>
+                          <p className="text-[10px] text-muted-foreground mt-1">
+                            {format(new Date(c.created_at), 'dd/MM/yyyy HH:mm')}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteComentario(c)}
+                          className="flex-shrink-0 mt-1 opacity-0 group-hover/com:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                  {/* Añadir comentario */}
+                  <div className="flex items-end gap-2 mt-1">
+                    <Textarea
+                      value={newComentario}
+                      onChange={(e) => setNewComentario(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          handleAddComentario()
+                        }
+                      }}
+                      placeholder="Añadir comentario... (Enter para enviar, Shift+Enter para nueva línea)"
+                      rows={2}
+                      className="text-xs flex-1 resize-none"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 flex-shrink-0"
+                      onClick={handleAddComentario}
+                      disabled={savingComentario || !newComentario.trim()}
+                    >
+                      {savingComentario ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <DialogFooter className="flex-shrink-0 flex-col-reverse sm:flex-row gap-2 pt-2">

@@ -4,18 +4,6 @@ import type { EstadoKanban, Tarea, Tag } from '@/types'
 import { cn, formatHoras } from '@/lib/utils'
 import { Lock, Clock, Github, Paperclip, GripVertical, CheckCheck, ListChecks } from 'lucide-react'
 
-const ESTADO_PAGO_COLORS = {
-  pendiente: 'text-yellow-500',
-  facturado: 'text-blue-400',
-  cobrado: 'text-green-400',
-}
-
-const ESTADO_PAGO_LABELS = {
-  pendiente: 'Pendiente',
-  facturado: 'Facturado',
-  cobrado: 'Cobrado',
-}
-
 const PRIORIDAD_COLORS = {
   critico: 'bg-red-500/20 text-red-400',
   alto: 'bg-orange-500/20 text-orange-400',
@@ -131,18 +119,13 @@ export function KanbanCard({ tarea, tag, onClick, onMarkDone }: KanbanCardProps)
           {tarea.github_url && <Github className="h-3 w-3" title="GitHub" />}
           {tarea.archivo_url && <Paperclip className="h-3 w-3" title="Archivo adjunto" />}
         </div>
-        <div className="flex items-center gap-1.5">
-          {tag && (
-            <span
-              className="inline-block w-2 h-2 rounded-full flex-shrink-0"
-              style={{ backgroundColor: tag.color }}
-              title={tag.nombre}
-            />
-          )}
-          <span className={cn('text-[10px] font-medium', ESTADO_PAGO_COLORS[tarea.estado_pago])}>
-            {ESTADO_PAGO_LABELS[tarea.estado_pago]}
-          </span>
-        </div>
+        {tag && (
+          <span
+            className="inline-block w-2 h-2 rounded-full flex-shrink-0"
+            style={{ backgroundColor: tag.color }}
+            title={tag.nombre}
+          />
+        )}
       </div>
 
       <p className="text-[10px] text-muted-foreground">{tarea.fecha}</p>

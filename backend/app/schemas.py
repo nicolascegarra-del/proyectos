@@ -11,8 +11,10 @@ from app.models import (
     EstadoKanban,
     EstadoPago,
     EstadoPresupuesto,
+    PeriodicidadGasto,
     Prioridad,
     RolWorkspace,
+    TipoPagoGasto,
 )
 
 
@@ -518,18 +520,41 @@ class SubtareaOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ── Comentario ────────────────────────────────────────────────────────────────
+
+class ComentarioCreate(BaseModel):
+    texto: str = Field(max_length=2000)
+
+
+class ComentarioUpdate(BaseModel):
+    texto: Optional[str] = Field(default=None, max_length=2000)
+
+
+class ComentarioOut(BaseModel):
+    id: uuid.UUID
+    tarea_id: uuid.UUID
+    texto: str
+    created_at: datetime
+    updated_at: datetime
+    model_config = {"from_attributes": True}
+
+
 # ── Gasto ─────────────────────────────────────────────────────────────────────
 
 class GastoCreate(BaseModel):
     concepto: str
     monto: float = Field(gt=0)
     fecha: date
+    tipo_pago: TipoPagoGasto = TipoPagoGasto.unico
+    periodicidad: Optional[PeriodicidadGasto] = None
 
 
 class GastoUpdate(BaseModel):
     concepto: Optional[str] = None
     monto: Optional[float] = Field(default=None, gt=0)
     fecha: Optional[date] = None
+    tipo_pago: Optional[TipoPagoGasto] = None
+    periodicidad: Optional[PeriodicidadGasto] = None
 
 
 class GastoOut(BaseModel):
@@ -538,6 +563,8 @@ class GastoOut(BaseModel):
     concepto: str
     monto: float
     fecha: date
+    tipo_pago: TipoPagoGasto = TipoPagoGasto.unico
+    periodicidad: Optional[PeriodicidadGasto] = None
     created_at: datetime
     updated_at: datetime
     model_config = {"from_attributes": True}

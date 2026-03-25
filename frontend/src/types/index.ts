@@ -155,12 +155,22 @@ export interface Subtarea {
   updated_at: string
 }
 
+export interface Comentario {
+  id: string
+  tarea_id: string
+  texto: string
+  created_at: string
+  updated_at: string
+}
+
 export interface Gasto {
   id: string
   proyecto_id: string
   concepto: string
   monto: number
   fecha: string
+  tipo_pago: 'unico' | 'recurrente'
+  periodicidad: 'mensual' | 'trimestral' | 'anual' | null
   created_at: string
   updated_at: string
 }

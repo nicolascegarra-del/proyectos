@@ -234,6 +234,17 @@ class Tarea(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
+class TipoPagoGasto(str, Enum):
+    unico = "unico"
+    recurrente = "recurrente"
+
+
+class PeriodicidadGasto(str, Enum):
+    mensual = "mensual"
+    trimestral = "trimestral"
+    anual = "anual"
+
+
 class Gasto(SQLModel, table=True):
     __tablename__ = "gasto"
     __table_args__ = (
@@ -245,6 +256,8 @@ class Gasto(SQLModel, table=True):
     concepto: str = Field(max_length=500)
     monto: float
     fecha: date
+    tipo_pago: TipoPagoGasto = TipoPagoGasto.unico
+    periodicidad: Optional[PeriodicidadGasto] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
@@ -307,6 +320,16 @@ class Subtarea(SQLModel, table=True):
     tarea_id: uuid.UUID = Field(foreign_key="tarea.id", index=True)
     descripcion: str = Field(max_length=500)
     completada: bool = False
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+
+class Comentario(SQLModel, table=True):
+    __tablename__ = "comentario"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    tarea_id: uuid.UUID = Field(foreign_key="tarea.id", index=True)
+    texto: str = Field(max_length=2000)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 

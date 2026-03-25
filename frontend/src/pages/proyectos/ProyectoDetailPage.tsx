@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertTriangle, ArrowLeft, Copy, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { toast } from '@/components/ui/use-toast'
 import { enqueueSync, db, upsertLocal } from '@/lib/db'
@@ -50,7 +51,7 @@ export default function ProyectoDetailPage() {
   const [gastos, setGastos] = useState<Gasto[]>([])
   const [gastoModal, setGastoModal] = useState<Gasto | 'new' | null>(null)
   const [deletingGasto, setDeletingGasto] = useState<Gasto | null>(null)
-  const [gastoForm, setGastoForm] = useState({ concepto: '', monto: '', fecha: today() })
+  const [gastoForm, setGastoForm] = useState({ concepto: '', monto: '', fecha: today(), tipo_pago: 'unico' as 'unico' | 'recurrente', periodicidad: '' })
   const [savingGasto, setSavingGasto] = useState(false)
   const gastoConceptoRef = useRef<HTMLInputElement>(null)
 
@@ -301,9 +302,9 @@ export default function ProyectoDetailPage() {
 
   const openGastoModal = (g: Gasto | 'new') => {
     if (g === 'new') {
-      setGastoForm({ concepto: '', monto: '', fecha: today() })
+      setGastoForm({ concepto: '', monto: '', fecha: today(), tipo_pago: 'unico', periodicidad: '' })
     } else {
-      setGastoForm({ concepto: g.concepto, monto: String(g.monto), fecha: g.fecha })
+      setGastoForm({ concepto: g.concepto, monto: String(g.monto), fecha: g.fecha, tipo_pago: g.tipo_pago, periodicidad: g.periodicidad ?? '' })
     }
     setGastoModal(g)
     setTimeout(() => gastoConceptoRef.current?.focus(), 50)
@@ -319,17 +320,22 @@ export default function ProyectoDetailPage() {
     }
     setSavingGasto(true)
     try {
-      if (gastoModal === 'new') {
+      const gastoPayload = {
+        concepto, monto, fecha: gastoForm.fecha,
+        tipo_pago: gastoForm.tipo_pago,
+        periodicidad: gastoForm.tipo_pago === 'recurrente' && gastoForm.periodicidad ? gastoForm.periodicidad : null,
+      }
+    if (gastoModal === 'new') {
         const { data } = await api.post<Gasto>(
           `/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/gastos`,
-          { concepto, monto, fecha: gastoForm.fecha },
+          gastoPayload,
         )
         setGastos((prev) => [data, ...prev])
         toast({ title: 'Gasto creado' })
       } else if (gastoModal) {
         const { data } = await api.put<Gasto>(
           `/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/gastos/${gastoModal.id}`,
-          { concepto, monto, fecha: gastoForm.fecha },
+          gastoPayload,
         )
         setGastos((prev) => prev.map((g) => (g.id === data.id ? data : g)))
         toast({ title: 'Gasto actualizado' })
@@ -640,6 +646,11 @@ export default function ProyectoDetailPage() {
                     <p className="text-sm truncate">{g.concepto}</p>
                     <p className="text-xs text-muted-foreground">{g.fecha}</p>
                   </div>
+                  {g.tipo_pago === 'recurrente' && g.periodicidad && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 font-medium flex-shrink-0 capitalize">
+                      {g.periodicidad}
+                    </span>
+                  )}
                   <p className="text-sm font-medium flex-shrink-0">{formatEUR(g.monto)}</p>
                   <button
                     onClick={() => openGastoModal(g)}
@@ -700,6 +711,39 @@ export default function ProyectoDetailPage() {
                 />
               </div>
             </div>
+            <div className="space-y-1">
+              <Label>Tipo de pago</Label>
+              <Select
+                value={gastoForm.tipo_pago}
+                onValueChange={(v) => setGastoForm((f) => ({ ...f, tipo_pago: v as 'unico' | 'recurrente', periodicidad: v === 'unico' ? '' : f.periodicidad }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unico">Pago único</SelectItem>
+                  <SelectItem value="recurrente">Recurrente</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {gastoForm.tipo_pago === 'recurrente' && (
+              <div className="space-y-1">
+                <Label>Periodicidad</Label>
+                <Select
+                  value={gastoForm.periodicidad || 'mensual'}
+                  onValueChange={(v) => setGastoForm((f) => ({ ...f, periodicidad: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mensual">Mensual</SelectItem>
+                    <SelectItem value="trimestral">Trimestral</SelectItem>
+                    <SelectItem value="anual">Anual</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setGastoModal(null)}>Cancelar</Button>
@@ -793,6 +837,7 @@ export default function ProyectoDetailPage() {
         proyectoId={proyectoId}
         workspaceId={currentWorkspace?.id ?? ''}
         tags={tags}
+        sprints={sprints}
         onSaved={handleTareaSaved}
         onDeleted={handleTareaDeleted}
       />
