@@ -12,10 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { AlertDialog } from '@/components/ui/alert-dialog'
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
@@ -475,22 +472,15 @@ export default function ProyectoDetailPage() {
       </Dialog>
 
       {/* Confirmar eliminación de gasto */}
-      <AlertDialog open={deletingGasto !== null} onOpenChange={(v) => !v && setDeletingGasto(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar gasto?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta acción no se puede deshacer. Se eliminará el gasto "{deletingGasto?.concepto}".
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleGastoDelete} className="bg-destructive hover:bg-destructive/90">
-              Eliminar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <AlertDialog
+        open={deletingGasto !== null}
+        onOpenChange={(v) => !v && setDeletingGasto(null)}
+        title="¿Eliminar gasto?"
+        description={`Esta acción no se puede deshacer. Se eliminará el gasto "${deletingGasto?.concepto}".`}
+        confirmLabel="Eliminar"
+        onConfirm={handleGastoDelete}
+        variant="destructive"
+      />
 
       <TareaModal
         open={modalTarea !== null}
