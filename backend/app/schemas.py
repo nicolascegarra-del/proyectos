@@ -457,6 +457,27 @@ class TareaOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ── Subtarea ──────────────────────────────────────────────────────────────────
+
+class SubtareaCreate(BaseModel):
+    descripcion: str = Field(max_length=500)
+
+
+class SubtareaUpdate(BaseModel):
+    descripcion: Optional[str] = Field(default=None, max_length=500)
+    completada: Optional[bool] = None
+
+
+class SubtareaOut(BaseModel):
+    id: uuid.UUID
+    tarea_id: uuid.UUID
+    descripcion: str
+    completada: bool
+    created_at: datetime
+    updated_at: datetime
+    model_config = {"from_attributes": True}
+
+
 # ── Gasto ─────────────────────────────────────────────────────────────────────
 
 class GastoCreate(BaseModel):

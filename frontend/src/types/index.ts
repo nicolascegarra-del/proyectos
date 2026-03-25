@@ -124,6 +124,15 @@ export interface Tarea {
   alerta_retainer?: boolean
 }
 
+export interface Subtarea {
+  id: string
+  tarea_id: string
+  descripcion: string
+  completada: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface Gasto {
   id: string
   proyecto_id: string

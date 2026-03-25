@@ -14,11 +14,30 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { AlertDialog } from '@/components/ui/alert-dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { Plus, FolderKanban, ExternalLink, Loader2 } from 'lucide-react'
+import { Plus, FolderKanban, ExternalLink, Loader2, Pencil, Trash2 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from '@/components/ui/use-toast'
+
+type FormState = {
+  nombre: string
+  cliente_id: string
+  tarifa_hora: string
+  alerta_horas_max: string
+  stopwatch_enabled: boolean
+  retainer_horas: string
+}
+
+const emptyForm = (): FormState => ({
+  nombre: '',
+  cliente_id: '',
+  tarifa_hora: '0',
+  alerta_horas_max: '',
+  stopwatch_enabled: false,
+  retainer_horas: '',
+})
 
 export default function ProyectosPage() {
   const currentWorkspace = useWorkspaceStore((s) => s.currentWorkspace)
@@ -26,20 +45,15 @@ export default function ProyectosPage() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
+  const [editTarget, setEditTarget] = useState<Proyecto | null>(null)
   const [saving, setSaving] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Proyecto | null>(null)
   const [newClientOpen, setNewClientOpen] = useState(false)
   const [newClientNombre, setNewClientNombre] = useState('')
   const [newClientEmail, setNewClientEmail] = useState('')
   const [savingClient, setSavingClient] = useState(false)
 
-  const [form, setForm] = useState({
-    nombre: '',
-    cliente_id: '',
-    tarifa_hora: '0',
-    alerta_horas_max: '',
-    stopwatch_enabled: false,
-    retainer_horas: '',
-  })
+  const [form, setForm] = useState<FormState>(emptyForm())
 
   const navigate = useNavigate()
 
@@ -62,33 +76,78 @@ export default function ProyectosPage() {
 
   useEffect(() => { load() }, [currentWorkspace?.id])
 
-  const resetForm = () =>
-    setForm({ nombre: '', cliente_id: '', tarifa_hora: '0', alerta_horas_max: '', stopwatch_enabled: false, retainer_horas: '' })
+  const openCreate = () => {
+    setEditTarget(null)
+    setForm(emptyForm())
+    setModalOpen(true)
+  }
 
-  const handleCreate = async () => {
+  const openEdit = (p: Proyecto, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setEditTarget(p)
+    setForm({
+      nombre: p.nombre,
+      cliente_id: p.cliente_id,
+      tarifa_hora: p.tarifa_hora.toString(),
+      alerta_horas_max: p.alerta_horas_max?.toString() ?? '',
+      stopwatch_enabled: p.stopwatch_enabled,
+      retainer_horas: p.retainer_horas?.toString() ?? '',
+    })
+    setModalOpen(true)
+  }
+
+  const handleSave = async () => {
     if (!form.nombre || !form.cliente_id || !currentWorkspace) return
     setSaving(true)
     try {
-      const { data } = await api.post<Proyecto>(
-        `/workspaces/${currentWorkspace.id}/proyectos`,
-        {
-          nombre: form.nombre,
-          cliente_id: form.cliente_id,
-          tarifa_hora: parseFloat(form.tarifa_hora) || 0,
-          alerta_horas_max: form.alerta_horas_max ? parseFloat(form.alerta_horas_max) : null,
-          stopwatch_enabled: form.stopwatch_enabled,
-          retainer_horas: form.retainer_horas ? parseFloat(form.retainer_horas) : null,
-        },
-      )
-      setProyectos((p) => [...p, data])
+      const payload = {
+        nombre: form.nombre,
+        cliente_id: form.cliente_id,
+        tarifa_hora: parseFloat(form.tarifa_hora) || 0,
+        alerta_horas_max: form.alerta_horas_max ? parseFloat(form.alerta_horas_max) : null,
+        stopwatch_enabled: form.stopwatch_enabled,
+        retainer_horas: form.retainer_horas ? parseFloat(form.retainer_horas) : null,
+      }
+
+      if (editTarget) {
+        const { data } = await api.put<Proyecto>(
+          `/workspaces/${currentWorkspace.id}/proyectos/${editTarget.id}`,
+          payload,
+        )
+        setProyectos((prev) => prev.map((x) => (x.id === data.id ? data : x)))
+        toast({ title: 'Proyecto actualizado' })
+      } else {
+        const { data } = await api.post<Proyecto>(
+          `/workspaces/${currentWorkspace.id}/proyectos`,
+          payload,
+        )
+        setProyectos((prev) => [...prev, data])
+        toast({ title: 'Proyecto creado' })
+      }
       setModalOpen(false)
-      resetForm()
-      toast({ title: 'Proyecto creado' })
+      setForm(emptyForm())
     } catch (err) {
       const msg = getErrorMessage(err)
-      toast({ title: isLimitError(err) ? 'Límite de plan alcanzado' : 'No se pudo crear el proyecto', description: msg, variant: 'destructive' })
+      toast({
+        title: isLimitError(err) ? 'Límite de plan alcanzado' : editTarget ? 'No se pudo actualizar el proyecto' : 'No se pudo crear el proyecto',
+        description: msg,
+        variant: 'destructive',
+      })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget || !currentWorkspace) return
+    try {
+      await api.delete(`/workspaces/${currentWorkspace.id}/proyectos/${deleteTarget.id}`)
+      setProyectos((prev) => prev.filter((x) => x.id !== deleteTarget.id))
+      toast({ title: 'Proyecto eliminado' })
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    } finally {
+      setDeleteTarget(null)
     }
   }
 
@@ -140,7 +199,7 @@ export default function ProyectosPage() {
     <div className="space-y-4 max-w-4xl">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-xl font-semibold">Proyectos</h1>
-        <Button size="sm" onClick={() => setModalOpen(true)} className="h-10">
+        <Button size="sm" onClick={openCreate} className="h-10">
           <Plus className="mr-1.5 h-4 w-4" />
           Nuevo
         </Button>
@@ -150,7 +209,7 @@ export default function ProyectosPage() {
         <div className="flex flex-col items-center justify-center h-48 gap-3 text-muted-foreground border border-dashed border-border rounded-lg">
           <FolderKanban className="h-8 w-8" />
           <p className="text-sm">Crea tu primer proyecto</p>
-          <Button size="sm" onClick={() => setModalOpen(true)}>
+          <Button size="sm" onClick={openCreate}>
             <Plus className="mr-1.5 h-4 w-4" />
             Nuevo proyecto
           </Button>
@@ -164,11 +223,29 @@ export default function ProyectosPage() {
               onClick={() => navigate({ to: '/proyectos/$proyectoId', params: { proyectoId: p.id } })}
             >
               <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="font-medium truncate">{p.nombre}</p>
                   <p className="text-xs text-muted-foreground">{clienteNombre(p.cliente_id)}</p>
                 </div>
-                <ExternalLink className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                    onClick={(e) => openEdit(p, e)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(p) }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                  <ExternalLink className="h-4 w-4 text-muted-foreground mt-0.5" />
+                </div>
               </div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <span>{formatEUR(p.tarifa_hora)}/h</span>
@@ -184,10 +261,11 @@ export default function ProyectosPage() {
         </div>
       )}
 
-      <Dialog open={modalOpen} onOpenChange={(v) => { if (!v) { setModalOpen(false); resetForm() } }}>
+      {/* Modal crear/editar proyecto */}
+      <Dialog open={modalOpen} onOpenChange={(v) => { if (!v) { setModalOpen(false); setEditTarget(null); setForm(emptyForm()) } }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Nuevo proyecto</DialogTitle>
+            <DialogTitle>{editTarget ? 'Editar proyecto' : 'Nuevo proyecto'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1.5">
@@ -207,9 +285,11 @@ export default function ProyectosPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Button type="button" variant="outline" size="icon" title="Nuevo cliente" onClick={() => setNewClientOpen(true)}>
-                  <Plus className="h-4 w-4" />
-                </Button>
+                {!editTarget && (
+                  <Button type="button" variant="outline" size="icon" title="Nuevo cliente" onClick={() => setNewClientOpen(true)}>
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -232,14 +312,16 @@ export default function ProyectosPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setModalOpen(false); resetForm() }}>Cancelar</Button>
-            <Button onClick={handleCreate} disabled={saving || !form.nombre || !form.cliente_id}>
+            <Button variant="outline" onClick={() => { setModalOpen(false); setEditTarget(null); setForm(emptyForm()) }}>Cancelar</Button>
+            <Button onClick={handleSave} disabled={saving || !form.nombre || !form.cliente_id}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Crear
+              {editTarget ? 'Guardar' : 'Crear'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal nuevo cliente inline */}
       <Dialog open={newClientOpen} onOpenChange={(v) => { if (!v) { setNewClientOpen(false); setNewClientNombre(''); setNewClientEmail('') } }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
@@ -264,6 +346,16 @@ export default function ProyectosPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Confirmar eliminar */}
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Eliminar proyecto"
+        description={deleteTarget ? `¿Eliminar "${deleteTarget.nombre}"? Se eliminarán también todas sus tareas y gastos. Esta acción no se puede deshacer.` : ''}
+        confirmLabel="Eliminar"
+        onConfirm={handleDelete}
+      />
     </div>
   )
 }

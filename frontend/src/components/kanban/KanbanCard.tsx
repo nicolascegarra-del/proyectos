@@ -1,8 +1,8 @@
 import { useDraggable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
-import type { Tarea, Tag } from '@/types'
+import type { EstadoKanban, Tarea, Tag } from '@/types'
 import { cn, formatHoras } from '@/lib/utils'
-import { Lock, Clock, Github, Paperclip, GripVertical } from 'lucide-react'
+import { Lock, Clock, Github, Paperclip, GripVertical, CheckCheck } from 'lucide-react'
 
 const ESTADO_PAGO_COLORS = {
   pendiente: 'text-yellow-500',
@@ -34,9 +34,10 @@ interface KanbanCardProps {
   tarea: Tarea
   tag?: Tag
   onClick?: (tarea: Tarea) => void
+  onMarkDone?: (tareaId: string, estado: EstadoKanban) => void
 }
 
-export function KanbanCard({ tarea, tag, onClick }: KanbanCardProps) {
+export function KanbanCard({ tarea, tag, onClick, onMarkDone }: KanbanCardProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: tarea.id,
     disabled: tarea.is_locked,
@@ -46,6 +47,8 @@ export function KanbanCard({ tarea, tag, onClick }: KanbanCardProps) {
     ? { transform: CSS.Translate.toString(transform) }
     : undefined
 
+  const isDone = tarea.estado_kanban === 'done'
+
   return (
     <div
       ref={setNodeRef}
@@ -54,7 +57,7 @@ export function KanbanCard({ tarea, tag, onClick }: KanbanCardProps) {
       onClick={() => onClick?.(tarea)}
       className={cn(
         'bg-card border border-border rounded-md p-3 space-y-2',
-        'hover:border-primary/30 transition-colors select-none',
+        'hover:border-primary/30 transition-colors select-none group',
         isDragging && 'opacity-40 z-50',
         tarea.is_locked ? 'cursor-not-allowed opacity-75' : 'cursor-pointer',
       )}
@@ -75,6 +78,17 @@ export function KanbanCard({ tarea, tag, onClick }: KanbanCardProps) {
         </p>
         {tarea.is_locked && (
           <Lock className="h-3 w-3 text-muted-foreground flex-shrink-0 mt-0.5" />
+        )}
+        {/* Botón rápido "Marcar como hecho" */}
+        {!tarea.is_locked && !isDone && onMarkDone && (
+          <button
+            type="button"
+            title="Marcar como hecho"
+            onClick={(e) => { e.stopPropagation(); onMarkDone(tarea.id, 'done') }}
+            className="flex-shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-green-400"
+          >
+            <CheckCheck className="h-4 w-4" />
+          </button>
         )}
       </div>
 

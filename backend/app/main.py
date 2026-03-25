@@ -28,6 +28,7 @@ from app.routers import (
     proyectos,
     public,
     smtp,
+    subtareas,
     superadmin,
     sync,
     tags,
@@ -168,6 +169,7 @@ app.include_router(workspaces.router)
 app.include_router(clientes.router)
 app.include_router(proyectos.router)
 app.include_router(tareas.router)
+app.include_router(subtareas.router)
 app.include_router(gastos.router)
 app.include_router(presupuestos.router)
 app.include_router(articulos.router)

@@ -15,19 +15,22 @@ import {
 } from '@/components/ui/dialog'
 import { AlertDialog } from '@/components/ui/alert-dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Loader2, Trash2, Receipt } from 'lucide-react'
+import { Plus, Loader2, Trash2, Receipt, Pencil } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from '@/components/ui/use-toast'
+
+type GastoConNombre = Gasto & { proyecto_nombre: string }
 
 export default function GastosPage() {
   const currentWorkspace = useWorkspaceStore((s) => s.currentWorkspace)
   const [proyectos, setProyectos] = useState<Proyecto[]>([])
-  const [gastos, setGastos] = useState<(Gasto & { proyecto_nombre: string })[]>([])
+  const [gastos, setGastos] = useState<GastoConNombre[]>([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
+  const [editTarget, setEditTarget] = useState<GastoConNombre | null>(null)
   const [saving, setSaving] = useState(false)
   const [filterProyecto, setFilterProyecto] = useState('all')
-  const [deletingGasto, setDeletingGasto] = useState<(Gasto & { proyecto_nombre: string }) | null>(null)
+  const [deletingGasto, setDeletingGasto] = useState<GastoConNombre | null>(null)
 
   const [form, setForm] = useState({
     proyecto_id: '',
@@ -58,23 +61,53 @@ export default function GastosPage() {
 
   useEffect(() => { load() }, [currentWorkspace?.id])
 
-  const handleCreate = async () => {
-    if (!form.proyecto_id || !form.concepto || !form.monto || !currentWorkspace) return
+  const openCreate = () => {
+    setEditTarget(null)
+    setForm({ proyecto_id: '', concepto: '', monto: '', fecha: today() })
+    setModalOpen(true)
+  }
+
+  const openEdit = (gasto: GastoConNombre) => {
+    setEditTarget(gasto)
+    setForm({
+      proyecto_id: gasto.proyecto_id,
+      concepto: gasto.concepto,
+      monto: gasto.monto.toString(),
+      fecha: gasto.fecha,
+    })
+    setModalOpen(true)
+  }
+
+  const handleSave = async () => {
+    if (!form.concepto || !form.monto || !currentWorkspace) return
+    if (!editTarget && !form.proyecto_id) return
     setSaving(true)
     try {
-      const { data } = await api.post<Gasto>(
-        `/workspaces/${currentWorkspace.id}/proyectos/${form.proyecto_id}/gastos`,
-        { concepto: form.concepto, monto: parseFloat(form.monto), fecha: form.fecha },
-      )
-      const proyecto = proyectos.find((p) => p.id === form.proyecto_id)
-      setGastos((g) => [{ ...data, proyecto_nombre: proyecto?.nombre ?? '' }, ...g])
+      const proyectoId = editTarget ? editTarget.proyecto_id : form.proyecto_id
+      const payload = { concepto: form.concepto, monto: parseFloat(form.monto), fecha: form.fecha }
+
+      if (editTarget) {
+        const { data } = await api.put<Gasto>(
+          `/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/gastos/${editTarget.id}`,
+          payload,
+        )
+        const proyecto = proyectos.find((p) => p.id === proyectoId)
+        setGastos((g) => g.map((x) => x.id === data.id ? { ...data, proyecto_nombre: proyecto?.nombre ?? '' } : x))
+        toast({ title: 'Gasto actualizado' })
+      } else {
+        const { data } = await api.post<Gasto>(
+          `/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/gastos`,
+          payload,
+        )
+        const proyecto = proyectos.find((p) => p.id === proyectoId)
+        setGastos((g) => [{ ...data, proyecto_nombre: proyecto?.nombre ?? '' }, ...g])
+        toast({ title: 'Gasto registrado' })
+      }
       setModalOpen(false)
-      setForm({ proyecto_id: '', concepto: '', monto: '', fecha: today() })
-      toast({ title: 'Gasto registrado' })
     } catch (err) {
       const msg = getErrorMessage(err)
       toast({
-        title: isLimitError(err) ? 'Límite de plan alcanzado' : 'No se pudo registrar el gasto',
+        title: isLimitError(err) ? 'Límite de plan alcanzado' : editTarget ? 'No se pudo actualizar el gasto' : 'No se pudo registrar el gasto',
         description: msg,
         variant: 'destructive',
       })
@@ -83,7 +116,7 @@ export default function GastosPage() {
     }
   }
 
-  const handleDelete = async (gasto: Gasto & { proyecto_nombre: string }) => {
+  const handleDelete = async (gasto: GastoConNombre) => {
     if (!currentWorkspace) return
     try {
       await api.delete(
@@ -130,7 +163,7 @@ export default function GastosPage() {
           <h1 className="text-xl font-semibold">Gastos</h1>
           <p className="text-xs text-muted-foreground">Total: {formatEUR(totalGastos)}</p>
         </div>
-        <Button size="sm" className="h-10" onClick={() => setModalOpen(true)}>
+        <Button size="sm" className="h-10" onClick={openCreate}>
           <Plus className="mr-1.5 h-4 w-4" />
           Nuevo
         </Button>
@@ -172,6 +205,14 @@ export default function GastosPage() {
               <Button
                 variant="ghost"
                 size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                onClick={() => openEdit(gasto)}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
                 className="h-8 w-8 text-muted-foreground hover:text-destructive"
                 onClick={() => setDeletingGasto(gasto)}
               >
@@ -194,22 +235,24 @@ export default function GastosPage() {
       <Dialog open={modalOpen} onOpenChange={(v) => !v && setModalOpen(false)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Nuevo gasto</DialogTitle>
+            <DialogTitle>{editTarget ? 'Editar gasto' : 'Nuevo gasto'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label>Proyecto</Label>
-              <Select value={form.proyecto_id} onValueChange={(v) => setForm((f) => ({ ...f, proyecto_id: v }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona un proyecto" />
-                </SelectTrigger>
-                <SelectContent>
-                  {proyectos.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {!editTarget && (
+              <div className="space-y-1.5">
+                <Label>Proyecto</Label>
+                <Select value={form.proyecto_id} onValueChange={(v) => setForm((f) => ({ ...f, proyecto_id: v }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona un proyecto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {proyectos.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label>Concepto</Label>
               <Input value={form.concepto} onChange={(e) => setForm((f) => ({ ...f, concepto: e.target.value }))} placeholder="Descripción del gasto" />
@@ -227,9 +270,9 @@ export default function GastosPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setModalOpen(false)}>Cancelar</Button>
-            <Button onClick={handleCreate} disabled={saving || !form.proyecto_id || !form.concepto || !form.monto}>
+            <Button onClick={handleSave} disabled={saving || (!editTarget && !form.proyecto_id) || !form.concepto || !form.monto}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Guardar
+              {editTarget ? 'Guardar' : 'Guardar'}
             </Button>
           </DialogFooter>
         </DialogContent>

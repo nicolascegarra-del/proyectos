@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker ps:*)",
+      "Bash(docker exec:*)",
+      "Bash(npx tsc:*)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(docker compose:*)",
+      "Bash(/tmp/tree.txt:*)",
+      "Read(//tmp/**)",
+      "Bash(docker cp:*)",
+      "Bash(find 'C:/Users/nicol/OneDrive/PROYECTOS/KLYP/GESTION DE PROYECTOS/frontend' -type f \\\\\\(-name *.png -o -name *.jpg -o -name *.svg -o -name *.ico \\\\\\))",
+      "Bash(curl:*)"
+    ]
+  }
+}

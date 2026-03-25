@@ -15,7 +15,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, FileText, ExternalLink, Lock, Loader2 } from 'lucide-react'
+import { AlertDialog } from '@/components/ui/alert-dialog'
+import { Plus, FileText, ExternalLink, Lock, Loader2, Trash2 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from '@/components/ui/use-toast'
 
@@ -43,6 +44,7 @@ export default function PresupuestosPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [filterEstado, setFilterEstado] = useState<string>('all')
+  const [deleteTarget, setDeleteTarget] = useState<Presupuesto | null>(null)
 
   const [form, setForm] = useState({
     cliente_id: '',
@@ -103,6 +105,19 @@ export default function PresupuestosPage() {
       })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget || !currentWorkspace) return
+    try {
+      await api.delete(`/workspaces/${currentWorkspace.id}/presupuestos/${deleteTarget.id}`)
+      setPresupuestos((prev) => prev.filter((x) => x.id !== deleteTarget.id))
+      toast({ title: 'Presupuesto eliminado' })
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    } finally {
+      setDeleteTarget(null)
     }
   }
 
@@ -191,11 +206,30 @@ export default function PresupuestosPage() {
               <span className="font-semibold text-sm tabular-nums flex-shrink-0">
                 {formatEUR(p.total)}
               </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-destructive flex-shrink-0"
+                onClick={(e) => { e.stopPropagation(); setDeleteTarget(p) }}
+                disabled={p.is_locked}
+                title={p.is_locked ? 'No se puede eliminar un presupuesto bloqueado' : 'Eliminar'}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
               <ExternalLink className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
             </div>
           ))}
         </div>
       )}
+
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Eliminar presupuesto"
+        description={deleteTarget ? `¿Eliminar "${deleteTarget.numero}"? Se eliminarán también todas sus líneas. Esta acción no se puede deshacer.` : ''}
+        confirmLabel="Eliminar"
+        onConfirm={handleDelete}
+      />
 
       <Dialog open={modalOpen} onOpenChange={(v) => { if (!v) { setModalOpen(false); resetForm() } }}>
         <DialogContent className="max-w-sm">

@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from 'react'
 import { api, getErrorMessage } from '@/lib/api'
-import type { EstadoKanban, EstadoPago, Prioridad, Proyecto, Tag, Tarea } from '@/types'
+import type { EstadoKanban, EstadoPago, Prioridad, Proyecto, Subtarea, Tag, Tarea } from '@/types'
 import { today } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertDialog } from '@/components/ui/alert-dialog'
-import { ChevronDown, ChevronUp, Loader2, Paperclip, Trash2, X, ExternalLink } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Loader2, Paperclip, Plus, Trash2, X, ExternalLink } from 'lucide-react'
 import { toast } from '@/components/ui/use-toast'
 
 const COMPLEJIDAD_LABELS: Record<number, string> = {
@@ -95,6 +95,12 @@ export function TareaModal({
   const fileRef = useRef<HTMLInputElement>(null)
   const pendingFileRef = useRef<File | null>(null)
 
+  // Subtareas
+  const [subtareas, setSubtareas] = useState<Subtarea[]>([])
+  const [newSubtarea, setNewSubtarea] = useState('')
+  const [savingSubtarea, setSavingSubtarea] = useState(false)
+  const [loadingSubtareas, setLoadingSubtareas] = useState(false)
+
   const efectiveProyectoId = proyectoId || selectedProyectoId
 
   useEffect(() => {
@@ -117,15 +123,32 @@ export function TareaModal({
         })
         setArchivoUrl(tarea.archivo_url)
         setShowExtras(!!(tarea.github_url || tarea.archivo_url))
+        loadSubtareas(tarea.id, tarea.proyecto_id)
       } else {
         setForm(emptyForm())
         setArchivoUrl(null)
         setShowExtras(false)
+        setSubtareas([])
       }
       setDescError(false)
       pendingFileRef.current = null
+      setNewSubtarea('')
     }
   }, [open, tarea])
+
+  const loadSubtareas = async (tareaId: string, pId: string) => {
+    setLoadingSubtareas(true)
+    try {
+      const { data } = await api.get<Subtarea[]>(
+        `/workspaces/${workspaceId}/proyectos/${pId}/tareas/${tareaId}/subtareas`,
+      )
+      setSubtareas(data)
+    } catch {
+      // silencioso
+    } finally {
+      setLoadingSubtareas(false)
+    }
+  }
 
   const set = (field: keyof FormState, value: string) =>
     setForm((f) => ({ ...f, [field]: value }))
@@ -226,6 +249,50 @@ export function TareaModal({
     }
   }
 
+  const handleAddSubtarea = async () => {
+    if (!newSubtarea.trim() || !tarea) return
+    setSavingSubtarea(true)
+    try {
+      const { data } = await api.post<Subtarea>(
+        `/workspaces/${workspaceId}/proyectos/${efectiveProyectoId}/tareas/${tarea.id}/subtareas`,
+        { descripcion: newSubtarea.trim() },
+      )
+      setSubtareas((prev) => [...prev, data])
+      setNewSubtarea('')
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    } finally {
+      setSavingSubtarea(false)
+    }
+  }
+
+  const handleToggleSubtarea = async (subtarea: Subtarea) => {
+    if (!tarea) return
+    try {
+      const { data } = await api.put<Subtarea>(
+        `/workspaces/${workspaceId}/proyectos/${efectiveProyectoId}/tareas/${tarea.id}/subtareas/${subtarea.id}`,
+        { completada: !subtarea.completada },
+      )
+      setSubtareas((prev) => prev.map((s) => (s.id === data.id ? data : s)))
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    }
+  }
+
+  const handleDeleteSubtarea = async (subtarea: Subtarea) => {
+    if (!tarea) return
+    try {
+      await api.delete(
+        `/workspaces/${workspaceId}/proyectos/${efectiveProyectoId}/tareas/${tarea.id}/subtareas/${subtarea.id}`,
+      )
+      setSubtareas((prev) => prev.filter((s) => s.id !== subtarea.id))
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    }
+  }
+
+  const completadas = subtareas.filter((s) => s.completada).length
+
   const isBusy = saving || uploading
 
   return (
@@ -285,6 +352,81 @@ export function TareaModal({
                 className="resize-y"
               />
             </div>
+
+            {/* Subtareas (solo en edición) */}
+            {isEdit && (
+              <div className="border border-border/50 rounded-md overflow-hidden">
+                <div className="flex items-center justify-between px-3 py-2 bg-muted/30">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Subtareas
+                    {subtareas.length > 0 && (
+                      <span className="ml-1.5 text-muted-foreground/60">
+                        {completadas}/{subtareas.length}
+                      </span>
+                    )}
+                  </span>
+                  {subtareas.length > 0 && (
+                    <div className="flex-1 mx-3 h-1 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-green-500 rounded-full transition-all"
+                        style={{ width: `${(completadas / subtareas.length) * 100}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+                <div className="px-3 pb-3 pt-2 space-y-2">
+                  {loadingSubtareas ? (
+                    <p className="text-xs text-muted-foreground">Cargando...</p>
+                  ) : (
+                    subtareas.map((s) => (
+                      <div key={s.id} className="flex items-center gap-2 group/sub">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleSubtarea(s)}
+                          className={`flex-shrink-0 h-4 w-4 rounded border transition-colors flex items-center justify-center ${
+                            s.completada
+                              ? 'bg-green-500 border-green-500 text-white'
+                              : 'border-border hover:border-primary'
+                          }`}
+                        >
+                          {s.completada && <Check className="h-2.5 w-2.5" />}
+                        </button>
+                        <span className={`text-sm flex-1 min-w-0 ${s.completada ? 'line-through text-muted-foreground' : ''}`}>
+                          {s.descripcion}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteSubtarea(s)}
+                          className="flex-shrink-0 opacity-0 group-hover/sub:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                  {/* Añadir subtarea */}
+                  <div className="flex items-center gap-2 mt-1">
+                    <Input
+                      value={newSubtarea}
+                      onChange={(e) => setNewSubtarea(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddSubtarea() } }}
+                      placeholder="Nueva subtarea..."
+                      className="h-7 text-xs flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7 flex-shrink-0"
+                      onClick={handleAddSubtarea}
+                      disabled={savingSubtarea || !newSubtarea.trim()}
+                    >
+                      {savingSubtarea ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Fecha y horas */}
             <div className="grid grid-cols-2 gap-3">

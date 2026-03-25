@@ -285,6 +285,17 @@ class PresupuestoLinea(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
+class Subtarea(SQLModel, table=True):
+    __tablename__ = "subtarea"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    tarea_id: uuid.UUID = Field(foreign_key="tarea.id", index=True)
+    descripcion: str = Field(max_length=500)
+    completada: bool = False
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+
 class Configuracion(SQLModel, table=True):
     __tablename__ = "configuracion"
 

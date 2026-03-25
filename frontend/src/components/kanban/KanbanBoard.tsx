@@ -29,12 +29,14 @@ function DroppableColumn({
   tags,
   isOver,
   onCardClick,
+  onMarkDone,
 }: {
   col: { id: EstadoKanban; label: string }
   tareas: Tarea[]
   tags: Map<string, Tag>
   isOver: boolean
   onCardClick?: (t: Tarea) => void
+  onMarkDone?: (tareaId: string, estado: EstadoKanban) => void
 }) {
   const { setNodeRef } = useDroppable({ id: col.id })
 
@@ -67,6 +69,7 @@ function DroppableColumn({
               tarea={tarea}
               tag={tarea.tag_id ? tags.get(tarea.tag_id) : undefined}
               onClick={onCardClick}
+              onMarkDone={onMarkDone}
             />
           ))
         )}
@@ -143,6 +146,7 @@ export function KanbanBoard({ tareas, tags, onMoveCard, onCardClick }: KanbanBoa
             tags={tagMap}
             isOver={overColId === col.id && !!activeId}
             onCardClick={onCardClick}
+            onMarkDone={onMoveCard}
           />
         ))}
       </div>
