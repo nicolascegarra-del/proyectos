@@ -4,6 +4,7 @@ import { useWorkspaceStore } from '@/store/workspaceStore'
 import { api, getErrorMessage } from '@/lib/api'
 import type { EstadoKanban, Proyecto, RetainerCiclo, Tag, Tarea } from '@/types'
 import { KanbanBoard } from '@/components/kanban/KanbanBoard'
+import { GanttView } from '@/components/gantt/GanttView'
 import { Stopwatch } from '@/components/stopwatch/Stopwatch'
 import { TareaModal } from '@/components/tareas/TareaModal'
 import { formatEUR, formatHoras, today } from '@/lib/utils'
@@ -110,6 +111,8 @@ export default function ProyectoDetailPage() {
         archivo_url: null,
         prioridad: null,
         complejidad: null,
+        fecha_inicio: null,
+        fecha_fin: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }
@@ -249,6 +252,7 @@ export default function ProyectoDetailPage() {
         <TabsList className="h-9">
           <TabsTrigger value="kanban" className="text-sm">Kanban</TabsTrigger>
           <TabsTrigger value="lista" className="text-sm">Lista</TabsTrigger>
+          <TabsTrigger value="gantt" className="text-sm">Gantt</TabsTrigger>
         </TabsList>
         <TabsContent value="kanban" className="mt-3">
           <KanbanBoard
@@ -256,6 +260,13 @@ export default function ProyectoDetailPage() {
             tags={tags}
             onMoveCard={handleMoveCard}
             onCardClick={(t) => setModalTarea(t)}
+          />
+        </TabsContent>
+        <TabsContent value="gantt" className="mt-3">
+          <GanttView
+            tareas={tareas}
+            tags={tags}
+            onTaskClick={(t) => setModalTarea(t)}
           />
         </TabsContent>
         <TabsContent value="lista" className="mt-3">

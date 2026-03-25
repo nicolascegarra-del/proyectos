@@ -400,6 +400,8 @@ class TareaCreate(BaseModel):
     archivo_url: Optional[str] = None
     prioridad: Optional[Prioridad] = None
     complejidad: Optional[int] = Field(default=None, ge=1, le=9)
+    fecha_inicio: Optional[date] = None
+    fecha_fin: Optional[date] = None
 
     @field_validator("github_url")
     @classmethod
@@ -421,6 +423,8 @@ class TareaUpdate(BaseModel):
     archivo_url: Optional[str] = None
     prioridad: Optional[Prioridad] = None
     complejidad: Optional[int] = Field(default=None, ge=1, le=9)
+    fecha_inicio: Optional[date] = None
+    fecha_fin: Optional[date] = None
 
     @field_validator("github_url")
     @classmethod
@@ -444,6 +448,8 @@ class TareaOut(BaseModel):
     archivo_url: Optional[str]
     prioridad: Optional[Prioridad]
     complejidad: Optional[int]
+    fecha_inicio: Optional[date]
+    fecha_fin: Optional[date]
     created_at: datetime
     updated_at: datetime
     alerta_horas: bool = False

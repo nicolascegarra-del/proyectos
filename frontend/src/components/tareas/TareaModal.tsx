@@ -53,6 +53,8 @@ type FormState = {
   github_url: string
   estado_pago: EstadoPago
   estado_kanban: EstadoKanban
+  fecha_inicio: string
+  fecha_fin: string
 }
 
 const emptyForm = (): FormState => ({
@@ -66,6 +68,8 @@ const emptyForm = (): FormState => ({
   github_url: '',
   estado_pago: 'pendiente',
   estado_kanban: 'todo',
+  fecha_inicio: '',
+  fecha_fin: '',
 })
 
 export function TareaModal({
@@ -108,6 +112,8 @@ export function TareaModal({
           github_url: tarea.github_url ?? '',
           estado_pago: tarea.estado_pago,
           estado_kanban: tarea.estado_kanban,
+          fecha_inicio: tarea.fecha_inicio ?? '',
+          fecha_fin: tarea.fecha_fin ?? '',
         })
         setArchivoUrl(tarea.archivo_url)
         setShowExtras(!!(tarea.github_url || tarea.archivo_url))
@@ -172,6 +178,8 @@ export function TareaModal({
         github_url: form.github_url || null,
         estado_pago: form.estado_pago,
         estado_kanban: form.estado_kanban,
+        fecha_inicio: form.fecha_inicio || null,
+        fecha_fin: form.fecha_fin || null,
       }
 
       let savedTarea: Tarea
@@ -297,6 +305,26 @@ export function TareaModal({
                   step="0.25"
                   value={form.horas}
                   onChange={(e) => set('horas', e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Planificación Gantt */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Inicio (Gantt)</Label>
+                <Input
+                  type="date"
+                  value={form.fecha_inicio}
+                  onChange={(e) => set('fecha_inicio', e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Fin (Gantt)</Label>
+                <Input
+                  type="date"
+                  value={form.fecha_fin}
+                  onChange={(e) => set('fecha_fin', e.target.value)}
                 />
               </div>
             </div>
