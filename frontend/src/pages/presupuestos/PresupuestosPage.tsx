@@ -7,6 +7,7 @@ import { formatEUR, formatDate } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { DatePicker } from '@/components/ui/date-picker'
 import {
   Dialog,
   DialogContent,
@@ -265,11 +266,7 @@ export default function PresupuestosPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Fecha</Label>
-              <Input
-                type="date"
-                value={form.fecha}
-                onChange={(e) => setForm((f) => ({ ...f, fecha: e.target.value }))}
-              />
+              <DatePicker value={form.fecha} onChange={(v) => setForm((f) => ({ ...f, fecha: v }))} />
             </div>
           </div>
           <DialogFooter>

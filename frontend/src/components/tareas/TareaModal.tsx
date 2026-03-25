@@ -6,6 +6,7 @@ import { today } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { DatePicker } from '@/components/ui/date-picker'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
@@ -473,11 +474,7 @@ export function TareaModal({
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Fecha</Label>
-                <Input
-                  type="date"
-                  value={form.fecha}
-                  onChange={(e) => set('fecha', e.target.value)}
-                />
+                <DatePicker value={form.fecha} onChange={(v) => set('fecha', v)} />
               </div>
               <div className="space-y-1.5">
                 <Label>Horas</Label>
@@ -496,19 +493,11 @@ export function TareaModal({
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Inicio (Gantt)</Label>
-                <Input
-                  type="date"
-                  value={form.fecha_inicio}
-                  onChange={(e) => set('fecha_inicio', e.target.value)}
-                />
+                <DatePicker value={form.fecha_inicio} onChange={(v) => set('fecha_inicio', v)} placeholder="Sin fecha inicio" />
               </div>
               <div className="space-y-1.5">
                 <Label>Fin (Gantt)</Label>
-                <Input
-                  type="date"
-                  value={form.fecha_fin}
-                  onChange={(e) => set('fecha_fin', e.target.value)}
-                />
+                <DatePicker value={form.fecha_fin} onChange={(v) => set('fecha_fin', v)} placeholder="Sin fecha fin" />
               </div>
             </div>
 

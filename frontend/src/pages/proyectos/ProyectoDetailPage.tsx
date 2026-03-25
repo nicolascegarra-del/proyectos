@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { DatePicker } from '@/components/ui/date-picker'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertTriangle, ArrowLeft, Copy, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { toast } from '@/components/ui/use-toast'
@@ -703,12 +704,7 @@ export default function ProyectoDetailPage() {
               </div>
               <div className="space-y-1">
                 <Label htmlFor="g-fecha">Fecha</Label>
-                <Input
-                  id="g-fecha"
-                  type="date"
-                  value={gastoForm.fecha}
-                  onChange={(e) => setGastoForm((f) => ({ ...f, fecha: e.target.value }))}
-                />
+                <DatePicker value={gastoForm.fecha} onChange={(v) => setGastoForm((f) => ({ ...f, fecha: v }))} />
               </div>
             </div>
             <div className="space-y-1">
@@ -781,11 +777,7 @@ export default function ProyectoDetailPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label>Fecha inicio</Label>
-                <Input
-                  type="date"
-                  value={sprintForm.fecha_inicio}
-                  onChange={(e) => setSprintForm((f) => ({ ...f, fecha_inicio: e.target.value }))}
-                />
+                <DatePicker value={sprintForm.fecha_inicio} onChange={(v) => setSprintForm((f) => ({ ...f, fecha_inicio: v }))} />
               </div>
               <div className="space-y-1">
                 <Label>Duración (días)</Label>
