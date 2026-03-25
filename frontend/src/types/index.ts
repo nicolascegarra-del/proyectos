@@ -68,6 +68,17 @@ export interface Cliente {
   updated_at: string
 }
 
+export interface Sprint {
+  id: string
+  proyecto_id: string
+  numero: number
+  nombre: string
+  fecha_inicio: string
+  fecha_fin: string
+  created_at: string
+  updated_at: string
+}
+
 export interface Proyecto {
   id: string
   workspace_id: string
@@ -78,6 +89,7 @@ export interface Proyecto {
   stopwatch_enabled: boolean
   retainer_horas: number | null
   public_uuid: string | null
+  sprint_duracion_dias: number | null
   created_at: string
   updated_at: string
 }
@@ -118,6 +130,7 @@ export interface Tarea {
   complejidad: number | null
   fecha_inicio: string | null
   fecha_fin: string | null
+  sprint_id: string | null
   created_at: string
   updated_at: string
   alerta_horas?: boolean

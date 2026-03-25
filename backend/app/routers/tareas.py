@@ -211,7 +211,12 @@ async def update_tarea(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tag no encontrado en este workspace")
 
     prev_estado_pago = tarea.estado_pago
+    # Handle nullable fields that can be explicitly cleared to None
+    if 'sprint_id' in data.model_fields_set:
+        tarea.sprint_id = data.sprint_id
     for field, value in data.model_dump(exclude_none=True).items():
+        if field == 'sprint_id':
+            continue  # already handled above
         setattr(tarea, field, value)
     tarea.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     session.add(tarea)

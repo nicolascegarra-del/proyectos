@@ -4,7 +4,6 @@ import {
   LayoutDashboard,
   FolderKanban,
   Users,
-  Clock,
   FileText,
   Building2,
 } from 'lucide-react'
@@ -13,7 +12,6 @@ import { useAuthStore } from '@/store/authStore'
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true },
   { to: '/proyectos', label: 'Proyectos', icon: FolderKanban },
-  { to: '/tareas', label: 'Bitácora', icon: Clock },
   { to: '/presupuestos', label: 'Presupuestos', icon: FileText },
   { to: '/clientes', label: 'Clientes', icon: Users },
 ]

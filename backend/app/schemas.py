@@ -314,6 +314,7 @@ class ProyectoUpdate(BaseModel):
     stopwatch_enabled: Optional[bool] = None
     retainer_horas: Optional[float] = None
     is_public: Optional[bool] = None
+    sprint_duracion_dias: Optional[int] = None
 
 
 class ProyectoOut(BaseModel):
@@ -327,6 +328,7 @@ class ProyectoOut(BaseModel):
     retainer_horas: Optional[float]
     public_uuid: Optional[uuid.UUID] = None
     is_public: bool
+    sprint_duracion_dias: Optional[int] = None
     created_at: datetime
     updated_at: datetime
     model_config = {"from_attributes": True}
@@ -336,6 +338,33 @@ class ProyectoOut(BaseModel):
         if not self.is_public:
             self.public_uuid = None
         return self
+
+
+# ── Sprint ────────────────────────────────────────────────────────────────────
+
+class SprintCreate(BaseModel):
+    numero: int
+    nombre: str = Field(max_length=100)
+    fecha_inicio: date
+    fecha_fin: date
+
+
+class SprintUpdate(BaseModel):
+    nombre: Optional[str] = Field(default=None, max_length=100)
+    fecha_inicio: Optional[date] = None
+    fecha_fin: Optional[date] = None
+
+
+class SprintOut(BaseModel):
+    id: uuid.UUID
+    proyecto_id: uuid.UUID
+    numero: int
+    nombre: str
+    fecha_inicio: date
+    fecha_fin: date
+    created_at: datetime
+    updated_at: datetime
+    model_config = {"from_attributes": True}
 
 
 # ── RetainerCiclo ─────────────────────────────────────────────────────────────
@@ -432,6 +461,7 @@ class TareaUpdate(BaseModel):
     complejidad: Optional[int] = Field(default=None, ge=1, le=9)
     fecha_inicio: Optional[date] = None
     fecha_fin: Optional[date] = None
+    sprint_id: Optional[uuid.UUID] = None
 
     @field_validator("github_url")
     @classmethod
@@ -457,6 +487,7 @@ class TareaOut(BaseModel):
     complejidad: Optional[int]
     fecha_inicio: Optional[date]
     fecha_fin: Optional[date]
+    sprint_id: Optional[uuid.UUID] = None
     created_at: datetime
     updated_at: datetime
     alerta_horas: bool = False

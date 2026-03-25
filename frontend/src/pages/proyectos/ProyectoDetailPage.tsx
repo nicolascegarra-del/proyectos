@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from '@tanstack/react-router'
 import { useWorkspaceStore } from '@/store/workspaceStore'
 import { api, getErrorMessage } from '@/lib/api'
-import type { EstadoKanban, Gasto, Proyecto, RetainerCiclo, Tag, Tarea } from '@/types'
+import type { EstadoKanban, Gasto, Proyecto, RetainerCiclo, Sprint, Tag, Tarea } from '@/types'
 import { KanbanBoard } from '@/components/kanban/KanbanBoard'
 import { GanttView } from '@/components/gantt/GanttView'
 import { Stopwatch } from '@/components/stopwatch/Stopwatch'
@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { AlertTriangle, ArrowLeft, Copy, Pencil, Plus, Trash2 } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Copy, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { toast } from '@/components/ui/use-toast'
 import { enqueueSync, db, upsertLocal } from '@/lib/db'
 import { useSyncStore } from '@/store/syncStore'
@@ -39,6 +39,13 @@ export default function ProyectoDetailPage() {
   // Modal de tarea: null = cerrado, 'new' = crear, Tarea = editar
   const [modalTarea, setModalTarea] = useState<Tarea | 'new' | null>(null)
 
+  // Sprints
+  const [sprints, setSprints] = useState<Sprint[]>([])
+  const [sprintModal, setSprintModal] = useState<Sprint | 'new' | null>(null)
+  const [sprintForm, setSprintForm] = useState({ nombre: '', fecha_inicio: '', duracion: '14' })
+  const [savingSprint, setSavingSprint] = useState(false)
+  const [deletingSprint, setDeletingSprint] = useState<Sprint | null>(null)
+
   // Gastos
   const [gastos, setGastos] = useState<Gasto[]>([])
   const [gastoModal, setGastoModal] = useState<Gasto | 'new' | null>(null)
@@ -51,16 +58,18 @@ export default function ProyectoDetailPage() {
     if (!currentWorkspace) return
     setLoading(true)
     try {
-      const [pRes, tRes, tagRes, gRes] = await Promise.all([
+      const [pRes, tRes, tagRes, gRes, sRes] = await Promise.all([
         api.get<Proyecto>(`/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}`),
         api.get<Tarea[]>(`/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/tareas`),
         api.get<Tag[]>(`/workspaces/${currentWorkspace.id}/tags`),
         api.get<Gasto[]>(`/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/gastos`),
+        api.get<Sprint[]>(`/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/sprints`),
       ])
       setProyecto(pRes.data)
       setTareas(applyKanbanOrder(tRes.data))
       setTags(tagRes.data)
       setGastos(gRes.data)
+      setSprints(sRes.data)
 
       const ciclosRes = await api.get<RetainerCiclo[]>(
         `/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/retainer-ciclos`,
@@ -129,6 +138,7 @@ export default function ProyectoDetailPage() {
         complejidad: null,
         fecha_inicio: null,
         fecha_fin: null,
+        sprint_id: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }
@@ -208,6 +218,85 @@ export default function ProyectoDetailPage() {
       const reordered = orderedIds.flatMap((id) => indexed.has(id) ? [indexed.get(id)!] : [])
       return [...others, ...reordered]
     })
+  }
+
+  const openSprintModal = (s: Sprint | 'new') => {
+    if (s === 'new') {
+      const lastSprint = sprints[sprints.length - 1]
+      const duracion = String(proyecto?.sprint_duracion_dias ?? 14)
+      if (lastSprint) {
+        const next = new Date(lastSprint.fecha_fin)
+        next.setDate(next.getDate() + 1)
+        setSprintForm({ nombre: `Sprint ${sprints.length + 1}`, fecha_inicio: next.toISOString().split('T')[0], duracion })
+      } else {
+        setSprintForm({ nombre: 'Sprint 1', fecha_inicio: today(), duracion })
+      }
+    } else {
+      const dur = Math.round((new Date(s.fecha_fin).getTime() - new Date(s.fecha_inicio).getTime()) / 86400000) + 1
+      setSprintForm({ nombre: s.nombre, fecha_inicio: s.fecha_inicio, duracion: String(dur) })
+    }
+    setSprintModal(s)
+  }
+
+  const handleSprintSave = async () => {
+    if (!currentWorkspace || !proyecto) return
+    const duracion = parseInt(sprintForm.duracion)
+    if (!sprintForm.nombre || !sprintForm.fecha_inicio || isNaN(duracion) || duracion < 1) return
+    const end = new Date(sprintForm.fecha_inicio)
+    end.setDate(end.getDate() + duracion - 1)
+    const fecha_fin = end.toISOString().split('T')[0]
+    setSavingSprint(true)
+    try {
+      if (sprintModal === 'new') {
+        const { data } = await api.post<Sprint>(
+          `/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/sprints`,
+          { numero: sprints.length + 1, nombre: sprintForm.nombre, fecha_inicio: sprintForm.fecha_inicio, fecha_fin },
+        )
+        setSprints((prev) => [...prev, data])
+        setProyecto((prev) => prev ? { ...prev, sprint_duracion_dias: duracion } : prev)
+        toast({ title: 'Sprint creado' })
+      } else {
+        const { data } = await api.put<Sprint>(
+          `/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/sprints/${(sprintModal as Sprint).id}`,
+          { nombre: sprintForm.nombre, fecha_inicio: sprintForm.fecha_inicio, fecha_fin },
+        )
+        setSprints((prev) => prev.map((s) => (s.id === data.id ? data : s)))
+        toast({ title: 'Sprint actualizado' })
+      }
+      setSprintModal(null)
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    } finally {
+      setSavingSprint(false)
+    }
+  }
+
+  const handleSprintDelete = async () => {
+    if (!currentWorkspace || !deletingSprint) return
+    try {
+      await api.delete(`/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/sprints/${deletingSprint.id}`)
+      setSprints((prev) => prev.filter((s) => s.id !== deletingSprint.id))
+      setTareas((prev) => prev.map((t) => t.sprint_id === deletingSprint.id ? { ...t, sprint_id: null } : t))
+      toast({ title: 'Sprint eliminado' })
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    } finally {
+      setDeletingSprint(null)
+    }
+  }
+
+  const handleAssignSprint = async (tareaId: string, sprintId: string | null) => {
+    if (!currentWorkspace) return
+    setTareas((prev) => prev.map((t) => t.id === tareaId ? { ...t, sprint_id: sprintId } : t))
+    try {
+      await api.put(
+        `/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/tareas/${tareaId}`,
+        { sprint_id: sprintId },
+      )
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+      await load()
+    }
   }
 
   const openGastoModal = (g: Gasto | 'new') => {
@@ -367,6 +456,7 @@ export default function ProyectoDetailPage() {
           <TabsTrigger value="kanban" className="text-sm">Kanban</TabsTrigger>
           <TabsTrigger value="lista" className="text-sm">Lista</TabsTrigger>
           <TabsTrigger value="gantt" className="text-sm">Gantt</TabsTrigger>
+          <TabsTrigger value="sprints" className="text-sm">Sprints</TabsTrigger>
           <TabsTrigger value="gastos" className="text-sm">Gastos</TabsTrigger>
         </TabsList>
         <TabsContent value="kanban" className="mt-3">
@@ -382,8 +472,114 @@ export default function ProyectoDetailPage() {
           <GanttView
             tareas={tareas}
             tags={tags}
+            sprints={sprints}
             onTaskClick={(t) => setModalTarea(t)}
           />
+        </TabsContent>
+        <TabsContent value="sprints" className="mt-3">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">Planificación por sprints</p>
+              <Button size="sm" className="h-8" onClick={() => openSprintModal('new')}>
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Nuevo sprint
+              </Button>
+            </div>
+            {sprints.length === 0 && (
+              <div className="flex flex-col items-center justify-center h-32 gap-2 text-muted-foreground border border-dashed border-border rounded-lg text-sm">
+                <p>No hay sprints creados</p>
+              </div>
+            )}
+            {sprints.map((sprint) => {
+              const sprintTareas = tareas.filter((t) => t.sprint_id === sprint.id)
+              const duracion = Math.round((new Date(sprint.fecha_fin).getTime() - new Date(sprint.fecha_inicio).getTime()) / 86400000) + 1
+              return (
+                <div key={sprint.id} className="border border-border rounded-lg overflow-hidden">
+                  <div className="flex items-center gap-3 px-4 py-2.5 bg-muted/30">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold">{sprint.nombre}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {sprint.fecha_inicio} – {sprint.fecha_fin} · {duracion} días
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => openSprintModal(sprint)}
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setDeletingSprint(sprint)}
+                      className="text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <div className="divide-y divide-border">
+                    {sprintTareas.length === 0 ? (
+                      <p className="px-4 py-3 text-xs text-muted-foreground italic">Sin tareas asignadas</p>
+                    ) : (
+                      sprintTareas.map((t) => (
+                        <div key={t.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/10">
+                          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setModalTarea(t)}>
+                            <p className="text-sm truncate">{t.descripcion}</p>
+                            <p className="text-xs text-muted-foreground">{formatHoras(t.horas)} · {t.estado_kanban.replace('_', ' ')}</p>
+                          </div>
+                          <button
+                            onClick={() => handleAssignSprint(t.id, null)}
+                            className="text-muted-foreground hover:text-destructive flex-shrink-0 transition-colors"
+                            title="Quitar del sprint"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+            {/* Sin planificar */}
+            {(() => {
+              const unplanned = tareas.filter((t) => !t.sprint_id)
+              if (unplanned.length === 0 && sprints.length > 0) return null
+              return (
+                <div className="border border-border rounded-lg overflow-hidden">
+                  <div className="px-4 py-2.5 bg-muted/20">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Sin planificar <span className="text-xs font-normal">({unplanned.length})</span>
+                    </p>
+                  </div>
+                  <div className="divide-y divide-border">
+                    {unplanned.length === 0 ? (
+                      <p className="px-4 py-3 text-xs text-muted-foreground italic">Todo está planificado</p>
+                    ) : (
+                      unplanned.map((t) => (
+                        <div key={t.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/10">
+                          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setModalTarea(t)}>
+                            <p className="text-sm truncate">{t.descripcion}</p>
+                            <p className="text-xs text-muted-foreground">{formatHoras(t.horas)} · {t.estado_kanban.replace('_', ' ')}</p>
+                          </div>
+                          {sprints.length > 0 && (
+                            <select
+                              className="text-xs bg-background border border-border rounded px-1.5 py-1 text-muted-foreground hover:text-foreground cursor-pointer flex-shrink-0"
+                              value=""
+                              onChange={(e) => e.target.value && handleAssignSprint(t.id, e.target.value)}
+                            >
+                              <option value="">Asignar sprint</option>
+                              {sprints.map((s) => (
+                                <option key={s.id} value={s.id}>{s.nombre}</option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
+          </div>
         </TabsContent>
         <TabsContent value="lista" className="mt-3">
           <div className="space-y-2">
@@ -520,6 +716,73 @@ export default function ProyectoDetailPage() {
         description={`Esta acción no se puede deshacer. Se eliminará el gasto "${deletingGasto?.concepto}".`}
         confirmLabel="Eliminar"
         onConfirm={handleGastoDelete}
+        variant="destructive"
+      />
+
+      {/* Sprint modal */}
+      <Dialog open={sprintModal !== null} onOpenChange={(v) => !v && setSprintModal(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{sprintModal === 'new' ? 'Nuevo sprint' : 'Editar sprint'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <Label>Nombre</Label>
+              <Input
+                value={sprintForm.nombre}
+                onChange={(e) => setSprintForm((f) => ({ ...f, nombre: e.target.value }))}
+                placeholder="Sprint 1"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Fecha inicio</Label>
+                <Input
+                  type="date"
+                  value={sprintForm.fecha_inicio}
+                  onChange={(e) => setSprintForm((f) => ({ ...f, fecha_inicio: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Duración (días)</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={sprintForm.duracion}
+                  onChange={(e) => setSprintForm((f) => ({ ...f, duracion: e.target.value }))}
+                />
+              </div>
+            </div>
+            {sprintForm.fecha_inicio && sprintForm.duracion && !isNaN(parseInt(sprintForm.duracion)) && (
+              <p className="text-xs text-muted-foreground">
+                Fin: {(() => {
+                  const d = new Date(sprintForm.fecha_inicio)
+                  d.setDate(d.getDate() + parseInt(sprintForm.duracion) - 1)
+                  return d.toISOString().split('T')[0]
+                })()}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSprintModal(null)}>Cancelar</Button>
+            <Button
+              onClick={handleSprintSave}
+              disabled={savingSprint || !sprintForm.nombre || !sprintForm.fecha_inicio || !sprintForm.duracion}
+            >
+              {sprintModal === 'new' ? 'Crear' : 'Guardar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmar eliminación de sprint */}
+      <AlertDialog
+        open={deletingSprint !== null}
+        onOpenChange={(v) => !v && setDeletingSprint(null)}
+        title="¿Eliminar sprint?"
+        description={`Las tareas de "${deletingSprint?.nombre}" quedarán sin planificar.`}
+        confirmLabel="Eliminar"
+        onConfirm={handleSprintDelete}
         variant="destructive"
       />
 

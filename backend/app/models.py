@@ -144,6 +144,7 @@ class Proyecto(SQLModel, table=True):
     retainer_horas: Optional[float] = None
     public_uuid: uuid.UUID = Field(default_factory=uuid.uuid4, unique=True, index=True)
     is_public: bool = False
+    sprint_duracion_dias: Optional[int] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
@@ -191,6 +192,19 @@ class EstadoKanban(str, Enum):
     done = "done"
 
 
+class Sprint(SQLModel, table=True):
+    __tablename__ = "sprint"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    proyecto_id: uuid.UUID = Field(foreign_key="proyecto.id", index=True)
+    numero: int
+    nombre: str = Field(max_length=100)
+    fecha_inicio: date
+    fecha_fin: date
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+
 class Tarea(SQLModel, table=True):
     __tablename__ = "tarea"
     __table_args__ = (
@@ -215,6 +229,7 @@ class Tarea(SQLModel, table=True):
     complejidad: Optional[int] = None
     fecha_inicio: Optional[date] = None
     fecha_fin: Optional[date] = None
+    sprint_id: Optional[uuid.UUID] = Field(default=None, foreign_key="sprint.id", index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
