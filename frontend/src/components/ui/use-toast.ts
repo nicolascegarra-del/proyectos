@@ -1,7 +1,8 @@
 import * as React from 'react'
 
 const TOAST_LIMIT = 5
-const TOAST_REMOVE_DELAY = 6000
+const TOAST_REMOVE_DELAY = 400   // tiempo animación salida
+const TOAST_AUTO_DISMISS_DELAY = 3000  // visible durante 3 segundos
 
 type ToastActionElement = React.ReactElement
 
@@ -98,6 +99,7 @@ function toast({ ...props }: Toast) {
     type: 'ADD_TOAST',
     toast: { ...props, id, open: true, onOpenChange: (open) => { if (!open) dismiss() } },
   })
+  setTimeout(dismiss, TOAST_AUTO_DISMISS_DELAY)
   return { id, dismiss, update }
 }
 

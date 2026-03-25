@@ -7,12 +7,13 @@ export function Toaster() {
 
   return (
     <div className="fixed bottom-0 right-0 z-[100] flex max-h-screen w-full flex-col-reverse gap-2 p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:w-[380px]">
-      {toasts.map(({ id, title, description, variant, open }) =>
-        open ? (
+      {toasts.map(({ id, title, description, variant, open }) => (
           <div
             key={id}
             className={cn(
-              'pointer-events-auto relative flex w-full items-start gap-3 overflow-hidden rounded-lg border p-4 shadow-lg transition-all',
+              'pointer-events-auto relative flex w-full items-start gap-3 overflow-hidden rounded-lg border p-4 shadow-lg',
+              'transition-all duration-300',
+              open ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none',
               variant === 'destructive'
                 ? 'border-destructive/50 bg-destructive text-destructive-foreground'
                 : 'border-border bg-card text-card-foreground',
@@ -29,7 +30,7 @@ export function Toaster() {
               <X className="h-4 w-4" />
             </button>
           </div>
-        ) : null,
+        )
       )}
     </div>
   )

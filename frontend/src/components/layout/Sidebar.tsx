@@ -7,7 +7,6 @@ import {
   Clock,
   Receipt,
   FileText,
-  Settings,
   Building2,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
@@ -64,18 +63,6 @@ export default function Sidebar({ className }: SidebarProps) {
       </nav>
 
       <div className="p-2 border-t border-border space-y-0.5">
-        <Link
-          to="/configuracion"
-          className={cn(
-            'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors min-h-[44px]',
-            isActive('/configuracion')
-              ? 'bg-primary/10 text-primary font-medium'
-              : 'text-muted-foreground hover:text-foreground hover:bg-accent',
-          )}
-        >
-          <Settings className="h-4 w-4 flex-shrink-0" />
-          Configuración
-        </Link>
         {user?.is_superadmin && (
           <Link
             to="/superadmin"
