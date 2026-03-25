@@ -20,7 +20,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { AlertTriangle, ArrowLeft, Copy, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Copy, Download, FileSpreadsheet, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { exportSprintsExcel, exportSprintsPDF, exportTareasExcel, exportGastosExcel } from '@/lib/export'
 import { toast } from '@/components/ui/use-toast'
 import { enqueueSync, db, upsertLocal } from '@/lib/db'
 import { useSyncStore } from '@/store/syncStore'
@@ -487,10 +489,32 @@ export default function ProyectoDetailPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">Planificación por sprints</p>
-              <Button size="sm" className="h-8" onClick={() => openSprintModal('new')}>
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
-                Nuevo sprint
-              </Button>
+              <div className="flex items-center gap-2">
+                {sprints.length > 0 && proyecto && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-8">
+                        <Download className="mr-1.5 h-3.5 w-3.5" />
+                        Exportar
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => exportSprintsExcel(proyecto, sprints, tareas, tags)}>
+                        <FileSpreadsheet className="mr-2 h-4 w-4" />
+                        Exportar Excel
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => exportSprintsPDF(proyecto, sprints, tareas, tags)}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Exportar PDF
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+                <Button size="sm" className="h-8" onClick={() => openSprintModal('new')}>
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  Nuevo sprint
+                </Button>
+              </div>
             </div>
             {sprints.length === 0 && (
               <div className="flex flex-col items-center justify-center h-32 gap-2 text-muted-foreground border border-dashed border-border rounded-lg text-sm">
@@ -590,6 +614,15 @@ export default function ProyectoDetailPage() {
         </TabsContent>
         <TabsContent value="lista" className="mt-3">
           <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">{tareas.length} tarea{tareas.length !== 1 ? 's' : ''}</p>
+              {tareas.length > 0 && proyecto && (
+                <Button variant="outline" size="sm" className="h-8" onClick={() => exportTareasExcel(proyecto, tareas, sprints, tags)}>
+                  <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
+                  Exportar Excel
+                </Button>
+              )}
+            </div>
             {tareas.length === 0 ? (
               <div className="flex items-center justify-center h-32 text-sm text-muted-foreground border border-dashed border-border rounded-lg">
                 No hay tareas
@@ -628,10 +661,18 @@ export default function ProyectoDetailPage() {
                 <p className="text-sm text-muted-foreground">Total</p>
                 <p className="font-semibold">{formatEUR(gastos.reduce((s, g) => s + g.monto, 0))}</p>
               </div>
-              <Button size="sm" className="h-9" onClick={() => openGastoModal('new')}>
-                <Plus className="mr-1.5 h-4 w-4" />
-                Nuevo gasto
-              </Button>
+              <div className="flex items-center gap-2">
+                {gastos.length > 0 && proyecto && (
+                  <Button variant="outline" size="sm" className="h-9" onClick={() => exportGastosExcel(proyecto, gastos)}>
+                    <FileSpreadsheet className="mr-1.5 h-4 w-4" />
+                    Exportar Excel
+                  </Button>
+                )}
+                <Button size="sm" className="h-9" onClick={() => openGastoModal('new')}>
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  Nuevo gasto
+                </Button>
+              </div>
             </div>
             {gastos.length === 0 ? (
               <div className="flex items-center justify-center h-32 text-sm text-muted-foreground border border-dashed border-border rounded-lg">
