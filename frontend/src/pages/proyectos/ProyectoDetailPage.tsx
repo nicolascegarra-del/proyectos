@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from '@tanstack/react-router'
 import { useWorkspaceStore } from '@/store/workspaceStore'
 import { api, getErrorMessage } from '@/lib/api'
-import type { EstadoKanban, Proyecto, RetainerCiclo, Tag, Tarea } from '@/types'
+import type { EstadoKanban, Gasto, Proyecto, RetainerCiclo, Tag, Tarea } from '@/types'
 import { KanbanBoard } from '@/components/kanban/KanbanBoard'
 import { GanttView } from '@/components/gantt/GanttView'
 import { Stopwatch } from '@/components/stopwatch/Stopwatch'
@@ -12,7 +12,16 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AlertTriangle, ArrowLeft, Copy, Pencil, Plus } from 'lucide-react'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { AlertTriangle, ArrowLeft, Copy, Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from '@/components/ui/use-toast'
 import { enqueueSync, db, upsertLocal } from '@/lib/db'
 import { useSyncStore } from '@/store/syncStore'
@@ -33,18 +42,28 @@ export default function ProyectoDetailPage() {
   // Modal de tarea: null = cerrado, 'new' = crear, Tarea = editar
   const [modalTarea, setModalTarea] = useState<Tarea | 'new' | null>(null)
 
+  // Gastos
+  const [gastos, setGastos] = useState<Gasto[]>([])
+  const [gastoModal, setGastoModal] = useState<Gasto | 'new' | null>(null)
+  const [deletingGasto, setDeletingGasto] = useState<Gasto | null>(null)
+  const [gastoForm, setGastoForm] = useState({ concepto: '', monto: '', fecha: today() })
+  const [savingGasto, setSavingGasto] = useState(false)
+  const gastoConceptoRef = useRef<HTMLInputElement>(null)
+
   const load = async () => {
     if (!currentWorkspace) return
     setLoading(true)
     try {
-      const [pRes, tRes, tagRes] = await Promise.all([
+      const [pRes, tRes, tagRes, gRes] = await Promise.all([
         api.get<Proyecto>(`/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}`),
         api.get<Tarea[]>(`/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/tareas`),
         api.get<Tag[]>(`/workspaces/${currentWorkspace.id}/tags`),
+        api.get<Gasto[]>(`/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/gastos`),
       ])
       setProyecto(pRes.data)
       setTareas(tRes.data)
       setTags(tagRes.data)
+      setGastos(gRes.data)
 
       const ciclosRes = await api.get<RetainerCiclo[]>(
         `/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/retainer-ciclos`,
@@ -154,6 +173,64 @@ export default function ProyectoDetailPage() {
     }
   }
 
+  const openGastoModal = (g: Gasto | 'new') => {
+    if (g === 'new') {
+      setGastoForm({ concepto: '', monto: '', fecha: today() })
+    } else {
+      setGastoForm({ concepto: g.concepto, monto: String(g.monto), fecha: g.fecha })
+    }
+    setGastoModal(g)
+    setTimeout(() => gastoConceptoRef.current?.focus(), 50)
+  }
+
+  const handleGastoSave = async () => {
+    if (!currentWorkspace) return
+    const concepto = gastoForm.concepto.trim()
+    const monto = parseFloat(gastoForm.monto)
+    if (!concepto || isNaN(monto) || monto <= 0) {
+      toast({ title: 'Concepto y monto válido son obligatorios', variant: 'destructive' })
+      return
+    }
+    setSavingGasto(true)
+    try {
+      if (gastoModal === 'new') {
+        const { data } = await api.post<Gasto>(
+          `/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/gastos`,
+          { concepto, monto, fecha: gastoForm.fecha },
+        )
+        setGastos((prev) => [data, ...prev])
+        toast({ title: 'Gasto creado' })
+      } else if (gastoModal) {
+        const { data } = await api.put<Gasto>(
+          `/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/gastos/${gastoModal.id}`,
+          { concepto, monto, fecha: gastoForm.fecha },
+        )
+        setGastos((prev) => prev.map((g) => (g.id === data.id ? data : g)))
+        toast({ title: 'Gasto actualizado' })
+      }
+      setGastoModal(null)
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    } finally {
+      setSavingGasto(false)
+    }
+  }
+
+  const handleGastoDelete = async () => {
+    if (!currentWorkspace || !deletingGasto) return
+    try {
+      await api.delete(
+        `/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/gastos/${deletingGasto.id}`,
+      )
+      setGastos((prev) => prev.filter((g) => g.id !== deletingGasto.id))
+      toast({ title: 'Gasto eliminado' })
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    } finally {
+      setDeletingGasto(null)
+    }
+  }
+
   const copyPublicLink = () => {
     if (!proyecto || !proyecto.public_uuid) return
     const url = `${window.location.origin}/p/${proyecto.public_uuid}`
@@ -253,6 +330,7 @@ export default function ProyectoDetailPage() {
           <TabsTrigger value="kanban" className="text-sm">Kanban</TabsTrigger>
           <TabsTrigger value="lista" className="text-sm">Lista</TabsTrigger>
           <TabsTrigger value="gantt" className="text-sm">Gantt</TabsTrigger>
+          <TabsTrigger value="gastos" className="text-sm">Gastos</TabsTrigger>
         </TabsList>
         <TabsContent value="kanban" className="mt-3">
           <KanbanBoard
@@ -302,7 +380,117 @@ export default function ProyectoDetailPage() {
             )}
           </div>
         </TabsContent>
+        <TabsContent value="gastos" className="mt-3">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Total</p>
+                <p className="font-semibold">{formatEUR(gastos.reduce((s, g) => s + g.monto, 0))}</p>
+              </div>
+              <Button size="sm" className="h-9" onClick={() => openGastoModal('new')}>
+                <Plus className="mr-1.5 h-4 w-4" />
+                Nuevo gasto
+              </Button>
+            </div>
+            {gastos.length === 0 ? (
+              <div className="flex items-center justify-center h-32 text-sm text-muted-foreground border border-dashed border-border rounded-lg">
+                No hay gastos en este proyecto
+              </div>
+            ) : (
+              gastos.map((g) => (
+                <div
+                  key={g.id}
+                  className="flex items-center gap-3 bg-card border border-border rounded-md px-4 py-3"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm truncate">{g.concepto}</p>
+                    <p className="text-xs text-muted-foreground">{g.fecha}</p>
+                  </div>
+                  <p className="text-sm font-medium flex-shrink-0">{formatEUR(g.monto)}</p>
+                  <button
+                    onClick={() => openGastoModal(g)}
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setDeletingGasto(g)}
+                    className="text-muted-foreground hover:text-destructive transition-colors"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </TabsContent>
       </Tabs>
+
+      {/* Modal crear/editar gasto */}
+      <Dialog open={gastoModal !== null} onOpenChange={(v) => !v && setGastoModal(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{gastoModal === 'new' ? 'Nuevo gasto' : 'Editar gasto'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <Label htmlFor="g-concepto">Concepto</Label>
+              <Input
+                id="g-concepto"
+                ref={gastoConceptoRef}
+                value={gastoForm.concepto}
+                onChange={(e) => setGastoForm((f) => ({ ...f, concepto: e.target.value }))}
+                onKeyDown={(e) => e.key === 'Enter' && handleGastoSave()}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="g-monto">Monto (€)</Label>
+                <Input
+                  id="g-monto"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={gastoForm.monto}
+                  onChange={(e) => setGastoForm((f) => ({ ...f, monto: e.target.value }))}
+                  onKeyDown={(e) => e.key === 'Enter' && handleGastoSave()}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="g-fecha">Fecha</Label>
+                <Input
+                  id="g-fecha"
+                  type="date"
+                  value={gastoForm.fecha}
+                  onChange={(e) => setGastoForm((f) => ({ ...f, fecha: e.target.value }))}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setGastoModal(null)}>Cancelar</Button>
+            <Button onClick={handleGastoSave} disabled={savingGasto}>Guardar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmar eliminación de gasto */}
+      <AlertDialog open={deletingGasto !== null} onOpenChange={(v) => !v && setDeletingGasto(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar gasto?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. Se eliminará el gasto "{deletingGasto?.concepto}".
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleGastoDelete} className="bg-destructive hover:bg-destructive/90">
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <TareaModal
         open={modalTarea !== null}

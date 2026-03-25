@@ -18,7 +18,6 @@ import ProyectosPage from './pages/proyectos/ProyectosPage'
 import ProyectoDetailPage from './pages/proyectos/ProyectoDetailPage'
 import ClientesPage from './pages/clientes/ClientesPage'
 import TareasPage from './pages/tareas/TareasPage'
-import GastosPage from './pages/gastos/GastosPage'
 import PresupuestosPage from './pages/presupuestos/PresupuestosPage'
 import PresupuestoDetailPage from './pages/presupuestos/PresupuestoDetailPage'
 import ConfiguracionPage from './pages/configuracion/ConfiguracionPage'
@@ -120,12 +119,6 @@ const tareasRoute = createRoute({
   component: TareasPage,
 })
 
-const gastosRoute = createRoute({
-  getParentRoute: () => appLayoutRoute,
-  path: '/gastos',
-  component: GastosPage,
-})
-
 const presupuestosRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/presupuestos',
@@ -179,7 +172,6 @@ const routeTree = rootRoute.addChildren([
     proyectoDetailRoute,
     clientesRoute,
     tareasRoute,
-    gastosRoute,
     presupuestosRoute,
     presupuestoDetailRoute,
     configuracionRoute,

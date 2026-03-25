@@ -5,7 +5,6 @@ import {
   FolderKanban,
   Users,
   Clock,
-  Receipt,
   FileText,
   Building2,
 } from 'lucide-react'
@@ -15,7 +14,6 @@ const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true },
   { to: '/proyectos', label: 'Proyectos', icon: FolderKanban },
   { to: '/tareas', label: 'Bitácora', icon: Clock },
-  { to: '/gastos', label: 'Gastos', icon: Receipt },
   { to: '/presupuestos', label: 'Presupuestos', icon: FileText },
   { to: '/clientes', label: 'Clientes', icon: Users },
 ]
