@@ -18,6 +18,7 @@ from app.database import get_session
 from app.models import (
     Configuracion,
     EstadoPago,
+    KanbanEstado,
     Proyecto,
     RetainerCiclo,
     RolWorkspace,
@@ -141,7 +142,22 @@ async def create_tarea(
         if not tag_result.first():
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tag no encontrado en este workspace")
 
-    tarea = Tarea(proyecto_id=proyecto_id, **data.model_dump())
+    # Resolver estado_kanban: si no se provee, usar el primer estado del proyecto
+    estado_kanban_id = data.estado_kanban
+    if estado_kanban_id is None:
+        first_estado_result = await session.exec(
+            select(KanbanEstado)
+            .where(KanbanEstado.proyecto_id == proyecto_id)
+            .order_by(KanbanEstado.orden)
+        )
+        first_estado = first_estado_result.first()
+        if not first_estado:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El proyecto no tiene estados Kanban configurados")
+        estado_kanban_id = first_estado.id
+
+    tarea_data = data.model_dump()
+    tarea_data['estado_kanban'] = estado_kanban_id
+    tarea = Tarea(proyecto_id=proyecto_id, **tarea_data)
     session.add(tarea)
     await session.commit()
     await session.refresh(tarea)

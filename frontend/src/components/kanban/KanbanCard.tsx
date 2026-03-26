@@ -1,6 +1,6 @@
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import type { EstadoKanban, Tarea, Tag } from '@/types'
+import type { Tarea, Tag } from '@/types'
 import { cn, formatHoras } from '@/lib/utils'
 import { Lock, Clock, Github, Paperclip, GripVertical, CheckCheck, ListChecks } from 'lucide-react'
 
@@ -22,10 +22,11 @@ interface KanbanCardProps {
   tarea: Tarea
   tag?: Tag
   onClick?: (tarea: Tarea) => void
-  onMarkDone?: (tareaId: string, estado: EstadoKanban) => void
+  onMarkDone?: (tareaId: string, estadoId: string) => void
+  isFinalEstado?: boolean
 }
 
-export function KanbanCard({ tarea, tag, onClick, onMarkDone }: KanbanCardProps) {
+export function KanbanCard({ tarea, tag, onClick, onMarkDone, isFinalEstado = false }: KanbanCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: tarea.id,
     disabled: tarea.is_locked,
@@ -36,7 +37,7 @@ export function KanbanCard({ tarea, tag, onClick, onMarkDone }: KanbanCardProps)
     transition,
   }
 
-  const isDone = tarea.estado_kanban === 'done'
+  const isDone = isFinalEstado
 
   return (
     <div

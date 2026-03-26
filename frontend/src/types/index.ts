@@ -1,8 +1,18 @@
 export type RolWorkspace = 'owner' | 'admin' | 'member' | 'viewer'
 export type EstadoPago = 'pendiente' | 'facturado' | 'cobrado'
-export type EstadoKanban = 'backlog' | 'todo' | 'en_progreso' | 'revision' | 'done'
 export type EstadoPresupuesto = 'borrador' | 'enviado' | 'aceptado' | 'rechazado'
 export type Prioridad = 'critico' | 'alto' | 'medio' | 'bajo'
+
+export interface KanbanEstado {
+  id: string
+  proyecto_id: string
+  nombre: string
+  orden: number
+  color: string
+  es_final: boolean
+  created_at: string
+  updated_at: string
+}
 
 export interface Plan {
   id: string
@@ -121,7 +131,7 @@ export interface Tarea {
   estado_pago: EstadoPago
   is_locked: boolean
   es_backlog: boolean
-  estado_kanban: EstadoKanban
+  estado_kanban: string   // UUID of KanbanEstado
   tag_id: string | null
   descripcion_larga: string | null
   github_url: string | null

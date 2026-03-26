@@ -2,7 +2,7 @@ import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { format } from 'date-fns'
-import type { Gasto, Proyecto, Sprint, Tag, Tarea } from '@/types'
+import type { Gasto, KanbanEstado, Proyecto, Sprint, Tag, Tarea } from '@/types'
 
 // ── Labels ────────────────────────────────────────────────────────────────────
 
@@ -13,18 +13,14 @@ const PRIORIDAD: Record<string, string> = {
   bajo: 'Bajo',
 }
 
-const ESTADO_KANBAN: Record<string, string> = {
-  backlog: 'Backlog',
-  todo: 'Pendiente',
-  en_progreso: 'En progreso',
-  revision: 'Revisión',
-  done: 'Hecho',
-}
-
 const ESTADO_PAGO: Record<string, string> = {
   pendiente: 'Pendiente',
   facturado: 'Facturado',
   cobrado: 'Cobrado',
+}
+
+function buildEstadoMap(kanbanEstados: KanbanEstado[]): Record<string, string> {
+  return Object.fromEntries(kanbanEstados.map((e) => [e.id, e.nombre]))
 }
 
 const TIPO_PAGO: Record<string, string> = {
@@ -69,7 +65,9 @@ export function exportSprintsExcel(
   sprints: Sprint[],
   tareas: Tarea[],
   tags: Tag[],
+  kanbanEstados: KanbanEstado[] = [],
 ) {
+  const ESTADO_KANBAN = buildEstadoMap(kanbanEstados)
   const wb = XLSX.utils.book_new()
 
   // ── Hoja 1: Planificación ──────────────────────────────────────────────────
@@ -167,7 +165,9 @@ export function exportSprintsPDF(
   sprints: Sprint[],
   tareas: Tarea[],
   _tags: Tag[],
+  kanbanEstados: KanbanEstado[] = [],
 ) {
+  const ESTADO_KANBAN = buildEstadoMap(kanbanEstados)
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const navy: [number, number, number] = [26, 58, 107]
   const pageW = doc.internal.pageSize.getWidth()
@@ -273,7 +273,9 @@ export function exportTareasExcel(
   tareas: Tarea[],
   sprints: Sprint[],
   tags: Tag[],
+  kanbanEstados: KanbanEstado[] = [],
 ) {
+  const ESTADO_KANBAN = buildEstadoMap(kanbanEstados)
   const sprintMap = Object.fromEntries(sprints.map((s) => [s.id, s.nombre]))
   const tagMap = Object.fromEntries(tags.map((t) => [t.id, t.nombre]))
 

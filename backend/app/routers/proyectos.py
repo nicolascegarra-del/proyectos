@@ -8,7 +8,7 @@ from sqlmodel import select
 
 from app.core.dependencies import get_current_user, get_workspace_member
 from app.database import get_session
-from app.models import Cliente, Proyecto, RetainerCiclo, RolWorkspace, Tarea, User
+from app.models import Cliente, KanbanEstado, Proyecto, RetainerCiclo, RolWorkspace, Tarea, User
 from app.schemas import (
     ProyectoCreate,
     ProyectoOut,
@@ -65,6 +65,28 @@ async def create_proyecto(
 
     proyecto = Proyecto(workspace_id=workspace_id, **data.model_dump())
     session.add(proyecto)
+    await session.flush()  # get proyecto.id
+
+    # Auto-crear 5 estados Kanban por defecto
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    defaults = [
+        ('Backlog', '#6B7280', False, 1),
+        ('Por hacer', '#3B82F6', False, 2),
+        ('En progreso', '#8B5CF6', False, 3),
+        ('Revisión', '#F59E0B', False, 4),
+        ('Hecho', '#10B981', True, 5),
+    ]
+    for nombre, color, es_final, orden in defaults:
+        session.add(KanbanEstado(
+            proyecto_id=proyecto.id,
+            nombre=nombre,
+            color=color,
+            es_final=es_final,
+            orden=orden,
+            created_at=now,
+            updated_at=now,
+        ))
+
     await session.commit()
     await session.refresh(proyecto)
     return proyecto

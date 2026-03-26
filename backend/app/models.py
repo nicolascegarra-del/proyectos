@@ -184,12 +184,17 @@ class Prioridad(str, Enum):
     bajo = "bajo"
 
 
-class EstadoKanban(str, Enum):
-    backlog = "backlog"
-    todo = "todo"
-    en_progreso = "en_progreso"
-    revision = "revision"
-    done = "done"
+class KanbanEstado(SQLModel, table=True):
+    __tablename__ = "kanban_estado"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    proyecto_id: uuid.UUID = Field(foreign_key="proyecto.id", index=True)
+    nombre: str = Field(max_length=50)
+    orden: int
+    color: str = Field(default='#6B7280', max_length=20)
+    es_final: bool = Field(default=False)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class Sprint(SQLModel, table=True):
@@ -209,7 +214,6 @@ class Tarea(SQLModel, table=True):
     __tablename__ = "tarea"
     __table_args__ = (
         Index("ix_tarea_proyecto_fecha", "proyecto_id", "fecha"),
-        Index("ix_tarea_estado_kanban", "estado_kanban"),
     )
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
@@ -220,7 +224,7 @@ class Tarea(SQLModel, table=True):
     estado_pago: EstadoPago = EstadoPago.pendiente
     is_locked: bool = False
     es_backlog: bool = False
-    estado_kanban: EstadoKanban = EstadoKanban.todo
+    estado_kanban: uuid.UUID = Field(foreign_key="kanban_estado.id", index=True)
     tag_id: Optional[uuid.UUID] = Field(default=None, foreign_key="tag.id")
     descripcion_larga: Optional[str] = None
     github_url: Optional[str] = Field(default=None, max_length=500)

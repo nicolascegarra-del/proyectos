@@ -8,7 +8,6 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 from app.models import (
-    EstadoKanban,
     EstadoPago,
     EstadoPresupuesto,
     PeriodicidadGasto,
@@ -415,6 +414,37 @@ class TagOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ── KanbanEstado ──────────────────────────────────────────────────────────────
+
+class KanbanEstadoCreate(BaseModel):
+    nombre: str = Field(max_length=50)
+    color: str = Field(default='#6B7280', max_length=20)
+    es_final: bool = False
+
+
+class KanbanEstadoUpdate(BaseModel):
+    nombre: Optional[str] = Field(default=None, max_length=50)
+    color: Optional[str] = Field(default=None, max_length=20)
+    es_final: Optional[bool] = None
+    orden: Optional[int] = None
+
+
+class KanbanEstadoOut(BaseModel):
+    id: uuid.UUID
+    proyecto_id: uuid.UUID
+    nombre: str
+    orden: int
+    color: str
+    es_final: bool
+    created_at: datetime
+    updated_at: datetime
+    model_config = {"from_attributes": True}
+
+
+class KanbanReorderRequest(BaseModel):
+    ids: list[uuid.UUID]
+
+
 # ── Tarea ─────────────────────────────────────────────────────────────────────
 
 def _validate_github_url(v: Optional[str]) -> Optional[str]:
@@ -431,7 +461,7 @@ class TareaCreate(BaseModel):
     fecha: date
     estado_pago: EstadoPago = EstadoPago.pendiente
     es_backlog: bool = False
-    estado_kanban: EstadoKanban = EstadoKanban.todo
+    estado_kanban: Optional[uuid.UUID] = None   # si None → se asigna el primer estado del proyecto
     tag_id: Optional[uuid.UUID] = None
     descripcion_larga: Optional[str] = Field(default=None, max_length=10000)
     github_url: Optional[str] = None
@@ -454,7 +484,7 @@ class TareaUpdate(BaseModel):
     estado_pago: Optional[EstadoPago] = None
     is_locked: Optional[bool] = None
     es_backlog: Optional[bool] = None
-    estado_kanban: Optional[EstadoKanban] = None
+    estado_kanban: Optional[uuid.UUID] = None
     tag_id: Optional[uuid.UUID] = None
     descripcion_larga: Optional[str] = Field(default=None, max_length=10000)
     github_url: Optional[str] = None
@@ -480,7 +510,7 @@ class TareaOut(BaseModel):
     estado_pago: EstadoPago
     is_locked: bool
     es_backlog: bool
-    estado_kanban: EstadoKanban
+    estado_kanban: uuid.UUID
     tag_id: Optional[uuid.UUID]
     descripcion_larga: Optional[str]
     github_url: Optional[str]

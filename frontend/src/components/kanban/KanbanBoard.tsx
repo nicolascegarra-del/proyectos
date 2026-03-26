@@ -12,42 +12,41 @@ import {
   DragOverEvent,
 } from '@dnd-kit/core'
 import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import type { EstadoKanban, Tag, Tarea } from '@/types'
+import type { KanbanEstado, Tag, Tarea } from '@/types'
 import { KanbanCard } from './KanbanCard'
 import { cn } from '@/lib/utils'
 
-const COLUMNS: { id: EstadoKanban; label: string }[] = [
-  { id: 'backlog', label: 'Backlog' },
-  { id: 'todo', label: 'Por hacer' },
-  { id: 'en_progreso', label: 'En progreso' },
-  { id: 'revision', label: 'Revisión' },
-  { id: 'done', label: 'Hecho' },
-]
-
 function DroppableColumn({
-  col,
+  estado,
   tareas,
   tags,
   isOver,
   onCardClick,
   onMarkDone,
 }: {
-  col: { id: EstadoKanban; label: string }
+  estado: KanbanEstado
   tareas: Tarea[]
   tags: Map<string, Tag>
   isOver: boolean
   onCardClick?: (t: Tarea) => void
-  onMarkDone?: (tareaId: string, estado: EstadoKanban) => void
+  onMarkDone?: (tareaId: string, estadoId: string) => void
+  // isFinalEstado is passed per-card from the column's estado.es_final
 }) {
-  const { setNodeRef } = useDroppable({ id: col.id })
+  const { setNodeRef } = useDroppable({ id: estado.id })
   const ids = tareas.map((t) => t.id)
 
   return (
     <div className="flex-1 min-w-[160px] flex flex-col gap-2">
       <div className="flex items-center justify-between px-1">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          {col.label}
-        </h3>
+        <div className="flex items-center gap-1.5">
+          <span
+            className="inline-block w-2 h-2 rounded-full flex-shrink-0"
+            style={{ backgroundColor: estado.color }}
+          />
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            {estado.nombre}
+          </h3>
+        </div>
         <span className="text-xs text-muted-foreground bg-muted rounded px-1.5 py-0.5">
           {tareas.length}
         </span>
@@ -73,6 +72,7 @@ function DroppableColumn({
                 tag={tarea.tag_id ? tags.get(tarea.tag_id) : undefined}
                 onClick={onCardClick}
                 onMarkDone={onMarkDone}
+                isFinalEstado={estado.es_final}
               />
             ))
           )}
@@ -85,14 +85,15 @@ function DroppableColumn({
 interface KanbanBoardProps {
   tareas: Tarea[]
   tags: Tag[]
-  onMoveCard: (tareaId: string, newEstado: EstadoKanban) => Promise<void>
-  onReorderCards: (col: EstadoKanban, orderedIds: string[]) => void
+  estados: KanbanEstado[]
+  onMoveCard: (tareaId: string, newEstadoId: string) => Promise<void>
+  onReorderCards: (estadoId: string, orderedIds: string[]) => void
   onCardClick?: (tarea: Tarea) => void
 }
 
-export function KanbanBoard({ tareas, tags, onMoveCard, onReorderCards, onCardClick }: KanbanBoardProps) {
+export function KanbanBoard({ tareas, tags, estados, onMoveCard, onReorderCards, onCardClick }: KanbanBoardProps) {
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [overColId, setOverColId] = useState<EstadoKanban | null>(null)
+  const [overColId, setOverColId] = useState<string | null>(null)
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 3 } }),
@@ -100,9 +101,13 @@ export function KanbanBoard({ tareas, tags, onMoveCard, onReorderCards, onCardCl
   )
 
   const tagMap = new Map(tags.map((t) => [t.id, t]))
+  const estadoIds = new Set(estados.map((e) => e.id))
 
-  const byColumn = (col: EstadoKanban) =>
-    tareas.filter((t) => t.estado_kanban === col)
+  // ID of the es_final estado (for quick-done button)
+  const finalEstadoId = estados.find((e) => e.es_final)?.id ?? estados[estados.length - 1]?.id
+
+  const byColumn = (estadoId: string) =>
+    tareas.filter((t) => t.estado_kanban === estadoId)
 
   const activeTarea = activeId ? tareas.find((t) => t.id === activeId) : null
 
@@ -111,8 +116,8 @@ export function KanbanBoard({ tareas, tags, onMoveCard, onReorderCards, onCardCl
   }
 
   const handleDragOver = (event: DragOverEvent) => {
-    const overId = event.over?.id as EstadoKanban | undefined
-    if (overId && COLUMNS.some((c) => c.id === overId)) {
+    const overId = event.over?.id as string | undefined
+    if (overId && estadoIds.has(overId)) {
       setOverColId(overId)
     } else {
       setOverColId(null)
@@ -133,14 +138,14 @@ export function KanbanBoard({ tareas, tags, onMoveCard, onReorderCards, onCardCl
     if (!activeTarea) return
 
     // Dropped over a column header (droppable)
-    if (COLUMNS.some((c) => c.id === overId)) {
+    if (estadoIds.has(overId)) {
       if (overId !== activeTarea.estado_kanban) {
-        onMoveCard(activeId, overId as EstadoKanban)
+        onMoveCard(activeId, overId)
       }
       return
     }
 
-    // Dropped over another card (sortable) — same column reorder
+    // Dropped over another card (sortable)
     const overTarea = tareas.find((t) => t.id === overId)
     if (!overTarea) return
 
@@ -160,6 +165,12 @@ export function KanbanBoard({ tareas, tags, onMoveCard, onReorderCards, onCardCl
     }
   }
 
+  const handleMarkDone = (tareaId: string, _: string) => {
+    if (finalEstadoId) {
+      onMoveCard(tareaId, finalEstadoId)
+    }
+  }
+
   return (
     <DndContext
       sensors={sensors}
@@ -168,15 +179,15 @@ export function KanbanBoard({ tareas, tags, onMoveCard, onReorderCards, onCardCl
       onDragEnd={handleDragEnd}
     >
       <div className="flex gap-3 overflow-x-auto pb-2 min-h-[400px]">
-        {COLUMNS.map((col) => (
+        {estados.map((estado) => (
           <DroppableColumn
-            key={col.id}
-            col={col}
-            tareas={byColumn(col.id)}
+            key={estado.id}
+            estado={estado}
+            tareas={byColumn(estado.id)}
             tags={tagMap}
-            isOver={overColId === col.id && !!activeId}
+            isOver={overColId === estado.id && !!activeId}
             onCardClick={onCardClick}
-            onMarkDone={onMoveCard}
+            onMarkDone={handleMarkDone}
           />
         ))}
       </div>

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from '@tanstack/react-router'
 import { useWorkspaceStore } from '@/store/workspaceStore'
 import { api, getErrorMessage } from '@/lib/api'
-import type { EstadoKanban, Gasto, Proyecto, RetainerCiclo, Sprint, Tag, Tarea } from '@/types'
+import type { Gasto, KanbanEstado, Proyecto, RetainerCiclo, Sprint, Tag, Tarea } from '@/types'
 import { KanbanBoard } from '@/components/kanban/KanbanBoard'
 import { GanttView } from '@/components/gantt/GanttView'
 import { Stopwatch } from '@/components/stopwatch/Stopwatch'
@@ -20,7 +20,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { AlertTriangle, ArrowLeft, Copy, Download, FileSpreadsheet, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, ChevronDown, ChevronUp, Copy, Download, FileSpreadsheet, Pencil, Plus, Settings2, Trash2, X } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { exportSprintsExcel, exportSprintsPDF, exportTareasExcel, exportGastosExcel } from '@/lib/export'
 import { toast } from '@/components/ui/use-toast'
@@ -43,6 +43,14 @@ export default function ProyectoDetailPage() {
   // Modal de tarea: null = cerrado, 'new' = crear, Tarea = editar
   const [modalTarea, setModalTarea] = useState<Tarea | 'new' | null>(null)
 
+  // Kanban estados
+  const [kanbanEstados, setKanbanEstados] = useState<KanbanEstado[]>([])
+  const [kanbanSprintFilter, setKanbanSprintFilter] = useState<string>('all')
+  const [estadosModalOpen, setEstadosModalOpen] = useState(false)
+  const [editingEstado, setEditingEstado] = useState<KanbanEstado | null>(null)
+  const [newEstadoNombre, setNewEstadoNombre] = useState('')
+  const [savingEstado, setSavingEstado] = useState(false)
+
   // Sprints
   const [sprints, setSprints] = useState<Sprint[]>([])
   const [sprintModal, setSprintModal] = useState<Sprint | 'new' | null>(null)
@@ -62,18 +70,20 @@ export default function ProyectoDetailPage() {
     if (!currentWorkspace) return
     setLoading(true)
     try {
-      const [pRes, tRes, tagRes, gRes, sRes] = await Promise.all([
+      const [pRes, tRes, tagRes, gRes, sRes, keRes] = await Promise.all([
         api.get<Proyecto>(`/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}`),
         api.get<Tarea[]>(`/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/tareas`),
         api.get<Tag[]>(`/workspaces/${currentWorkspace.id}/tags`),
         api.get<Gasto[]>(`/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/gastos`),
         api.get<Sprint[]>(`/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/sprints`),
+        api.get<KanbanEstado[]>(`/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/kanban-estados`),
       ])
       setProyecto(pRes.data)
       setTareas(applyKanbanOrder(tRes.data))
       setTags(tagRes.data)
       setGastos(gRes.data)
       setSprints(sRes.data)
+      setKanbanEstados(keRes.data)
 
       const ciclosRes = await api.get<RetainerCiclo[]>(
         `/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/retainer-ciclos`,
@@ -154,7 +164,7 @@ export default function ProyectoDetailPage() {
     }
   }
 
-  const handleMoveCard = async (tareaId: string, newEstado: EstadoKanban) => {
+  const handleMoveCard = async (tareaId: string, newEstado: string) => {
     if (!currentWorkspace) return
     const prevEstado = tareas.find((t) => t.id === tareaId)?.estado_kanban
     setTareas((t) =>
@@ -192,18 +202,18 @@ export default function ProyectoDetailPage() {
     }
   }
 
-  const saveKanbanOrder = (col: EstadoKanban, orderedIds: string[]) => {
+  const saveKanbanOrder = (estadoId: string, orderedIds: string[]) => {
     const current = getKanbanOrder()
-    localStorage.setItem(`kanban_order_${proyectoId}`, JSON.stringify({ ...current, [col]: orderedIds }))
+    localStorage.setItem(`kanban_order_${proyectoId}`, JSON.stringify({ ...current, [estadoId]: orderedIds }))
   }
 
   const applyKanbanOrder = (rawTareas: Tarea[]): Tarea[] => {
     const order = getKanbanOrder()
-    const cols = ['backlog', 'todo', 'en_progreso', 'revision', 'done'] as const
+    const estadoIds = [...new Set(rawTareas.map((t) => t.estado_kanban))]
     const result: Tarea[] = []
-    for (const col of cols) {
-      const colTareas = rawTareas.filter((t) => t.estado_kanban === col)
-      const ids = order[col]
+    for (const estadoId of estadoIds) {
+      const colTareas = rawTareas.filter((t) => t.estado_kanban === estadoId)
+      const ids = order[estadoId]
       if (!ids) { result.push(...colTareas); continue }
       const indexed = new Map(colTareas.map((t) => [t.id, t]))
       const ordered = ids.flatMap((id) => indexed.has(id) ? [indexed.get(id)!] : [])
@@ -213,15 +223,85 @@ export default function ProyectoDetailPage() {
     return result
   }
 
-  const handleReorderCards = (col: EstadoKanban, orderedIds: string[]) => {
-    saveKanbanOrder(col, orderedIds)
+  const handleReorderCards = (estadoId: string, orderedIds: string[]) => {
+    saveKanbanOrder(estadoId, orderedIds)
     setTareas((prev) => {
-      const others = prev.filter((t) => t.estado_kanban !== col)
-      const colTareas = prev.filter((t) => t.estado_kanban === col)
+      const others = prev.filter((t) => t.estado_kanban !== estadoId)
+      const colTareas = prev.filter((t) => t.estado_kanban === estadoId)
       const indexed = new Map(colTareas.map((t) => [t.id, t]))
       const reordered = orderedIds.flatMap((id) => indexed.has(id) ? [indexed.get(id)!] : [])
       return [...others, ...reordered]
     })
+  }
+
+  // ── Kanban estados handlers ──────────────────────────────────────────────────
+  const handleCreateEstado = async () => {
+    if (!currentWorkspace || !newEstadoNombre.trim()) return
+    setSavingEstado(true)
+    try {
+      const res = await api.post<KanbanEstado>(
+        `/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/kanban-estados`,
+        { nombre: newEstadoNombre.trim(), color: '#6B7280', es_final: false },
+      )
+      setKanbanEstados((prev) => [...prev, res.data])
+      setNewEstadoNombre('')
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    } finally {
+      setSavingEstado(false)
+    }
+  }
+
+  const handleUpdateEstado = async (estado: KanbanEstado, patch: Partial<KanbanEstado>) => {
+    if (!currentWorkspace) return
+    const updated = { ...estado, ...patch }
+    setKanbanEstados((prev) => prev.map((e) => (e.id === estado.id ? updated : e)))
+    try {
+      await api.put(
+        `/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/kanban-estados/${estado.id}`,
+        patch,
+      )
+    } catch (err) {
+      setKanbanEstados((prev) => prev.map((e) => (e.id === estado.id ? estado : e)))
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    }
+  }
+
+  const handleDeleteEstado = async (estado: KanbanEstado) => {
+    if (!currentWorkspace) return
+    try {
+      await api.delete(
+        `/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/kanban-estados/${estado.id}`,
+      )
+      setKanbanEstados((prev) => prev.filter((e) => e.id !== estado.id))
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    }
+  }
+
+  const handleMoveEstado = async (estado: KanbanEstado, direction: 'up' | 'down') => {
+    if (!currentWorkspace) return
+    const sorted = [...kanbanEstados].sort((a, b) => a.orden - b.orden)
+    const idx = sorted.findIndex((e) => e.id === estado.id)
+    if (direction === 'up' && idx === 0) return
+    if (direction === 'down' && idx === sorted.length - 1) return
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+    const newOrder = sorted.map((e) => e.id)
+    ;[newOrder[idx], newOrder[swapIdx]] = [newOrder[swapIdx], newOrder[idx]]
+    const reordered = newOrder.map((id, i) => {
+      const e = kanbanEstados.find((e) => e.id === id)!
+      return { ...e, orden: i + 1 }
+    })
+    setKanbanEstados(reordered)
+    try {
+      await api.put(
+        `/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/kanban-estados/reorder/bulk`,
+        { ids: newOrder },
+      )
+    } catch (err) {
+      setKanbanEstados(sorted)
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    }
   }
 
   const openSprintModal = (s: Sprint | 'new') => {
@@ -469,19 +549,43 @@ export default function ProyectoDetailPage() {
           <TabsTrigger value="gastos" className="text-sm">Gastos</TabsTrigger>
         </TabsList>
         <TabsContent value="kanban" className="mt-3">
-          <KanbanBoard
-            tareas={tareas.filter((t) => !t.es_backlog)}
-            tags={tags}
-            onMoveCard={handleMoveCard}
-            onReorderCards={handleReorderCards}
-            onCardClick={(t) => setModalTarea(t)}
-          />
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 justify-between">
+              <div className="flex items-center gap-2">
+                {sprints.length > 0 && (
+                  <Select value={kanbanSprintFilter} onValueChange={setKanbanSprintFilter}>
+                    <SelectTrigger className="h-8 w-auto text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos los sprints</SelectItem>
+                      {sprints.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>{s.nombre}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setEstadosModalOpen(true)} title="Gestionar estados">
+                <Settings2 className="h-4 w-4" />
+              </Button>
+            </div>
+            <KanbanBoard
+              tareas={tareas.filter((t) => !t.es_backlog && (kanbanSprintFilter === 'all' || t.sprint_id === kanbanSprintFilter))}
+              tags={tags}
+              estados={kanbanEstados}
+              onMoveCard={handleMoveCard}
+              onReorderCards={handleReorderCards}
+              onCardClick={(t) => setModalTarea(t)}
+            />
+          </div>
         </TabsContent>
         <TabsContent value="gantt" className="mt-3">
           <GanttView
             tareas={tareas}
             tags={tags}
             sprints={sprints}
+            kanbanEstados={kanbanEstados}
             onTaskClick={(t) => setModalTarea(t)}
           />
         </TabsContent>
@@ -499,11 +603,11 @@ export default function ProyectoDetailPage() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => exportSprintsExcel(proyecto, sprints, tareas, tags)}>
+                      <DropdownMenuItem onClick={() => exportSprintsExcel(proyecto, sprints, tareas, tags, kanbanEstados)}>
                         <FileSpreadsheet className="mr-2 h-4 w-4" />
                         Exportar Excel
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => exportSprintsPDF(proyecto, sprints, tareas, tags)}>
+                      <DropdownMenuItem onClick={() => exportSprintsPDF(proyecto, sprints, tareas, tags, kanbanEstados)}>
                         <Download className="mr-2 h-4 w-4" />
                         Exportar PDF
                       </DropdownMenuItem>
@@ -617,7 +721,7 @@ export default function ProyectoDetailPage() {
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">{tareas.length} tarea{tareas.length !== 1 ? 's' : ''}</p>
               {tareas.length > 0 && proyecto && (
-                <Button variant="outline" size="sm" className="h-8" onClick={() => exportTareasExcel(proyecto, tareas, sprints, tags)}>
+                <Button variant="outline" size="sm" className="h-8" onClick={() => exportTareasExcel(proyecto, tareas, sprints, tags, kanbanEstados)}>
                   <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
                   Exportar Excel
                 </Button>
@@ -712,6 +816,93 @@ export default function ProyectoDetailPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Dialog gestión de estados Kanban */}
+      <Dialog open={estadosModalOpen} onOpenChange={setEstadosModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Estados Kanban</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-1 max-h-80 overflow-y-auto">
+            {kanbanEstados.map((estado) => (
+              <div key={estado.id} className="flex items-center gap-2 py-1.5 px-1 rounded hover:bg-muted/20">
+                {/* Color picker inline */}
+                <div className="relative flex-shrink-0">
+                  <span
+                    className="inline-block w-4 h-4 rounded-full cursor-pointer border border-border"
+                    style={{ backgroundColor: estado.color }}
+                    title="Cambiar color"
+                  />
+                  <input
+                    type="color"
+                    className="absolute inset-0 opacity-0 cursor-pointer w-4 h-4"
+                    value={estado.color}
+                    onChange={(e) => handleUpdateEstado(estado, { color: e.target.value })}
+                  />
+                </div>
+                {/* Nombre editable */}
+                {editingEstado?.id === estado.id ? (
+                  <input
+                    className="flex-1 text-sm bg-background border border-input rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                    value={editingEstado.nombre}
+                    autoFocus
+                    onChange={(e) => setEditingEstado({ ...editingEstado, nombre: e.target.value })}
+                    onBlur={() => {
+                      if (editingEstado.nombre.trim() && editingEstado.nombre !== estado.nombre) {
+                        handleUpdateEstado(estado, { nombre: editingEstado.nombre.trim() })
+                      }
+                      setEditingEstado(null)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                      if (e.key === 'Escape') setEditingEstado(null)
+                    }}
+                  />
+                ) : (
+                  <span
+                    className="flex-1 text-sm cursor-text"
+                    onClick={() => setEditingEstado(estado)}
+                  >
+                    {estado.nombre}
+                  </span>
+                )}
+                {/* Es final toggle */}
+                <button
+                  title={estado.es_final ? 'Estado final (click para quitar)' : 'Marcar como estado final'}
+                  onClick={() => handleUpdateEstado(estado, { es_final: !estado.es_final })}
+                  className={`text-xs px-1.5 py-0.5 rounded border transition-colors flex-shrink-0 ${estado.es_final ? 'border-green-500 text-green-400 bg-green-500/10' : 'border-border text-muted-foreground'}`}
+                >
+                  ✓ final
+                </button>
+                {/* Reorder */}
+                <button onClick={() => handleMoveEstado(estado, 'up')} className="text-muted-foreground hover:text-foreground flex-shrink-0">
+                  <ChevronUp className="h-3.5 w-3.5" />
+                </button>
+                <button onClick={() => handleMoveEstado(estado, 'down')} className="text-muted-foreground hover:text-foreground flex-shrink-0">
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+                {/* Delete */}
+                <button onClick={() => handleDeleteEstado(estado)} className="text-muted-foreground hover:text-destructive flex-shrink-0">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+          {/* Add new estado */}
+          <div className="flex items-center gap-2 pt-2 border-t border-border">
+            <Input
+              placeholder="Nombre del nuevo estado"
+              className="h-8 text-sm flex-1"
+              value={newEstadoNombre}
+              onChange={(e) => setNewEstadoNombre(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleCreateEstado()}
+            />
+            <Button size="sm" className="h-8" onClick={handleCreateEstado} disabled={savingEstado || !newEstadoNombre.trim()}>
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal crear/editar gasto */}
       <Dialog open={gastoModal !== null} onOpenChange={(v) => !v && setGastoModal(null)}>

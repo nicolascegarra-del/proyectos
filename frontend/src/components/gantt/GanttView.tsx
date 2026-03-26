@@ -13,25 +13,9 @@ import {
 import { es } from 'date-fns/locale'
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { Sprint, Tag, Tarea } from '@/types'
+import type { KanbanEstado, Sprint, Tag, Tarea } from '@/types'
 
 const MONTHS_VISIBLE = 3
-
-const ESTADO_COLORS: Record<string, string> = {
-  backlog: 'bg-slate-400',
-  todo: 'bg-blue-500',
-  en_progreso: 'bg-amber-500',
-  revision: 'bg-violet-500',
-  done: 'bg-emerald-500',
-}
-
-const ESTADO_LABELS: Record<string, string> = {
-  backlog: 'Backlog',
-  todo: 'Por hacer',
-  en_progreso: 'En progreso',
-  revision: 'Revisión',
-  done: 'Hecho',
-}
 
 const SPRINT_COLORS = [
   'bg-blue-500/80',
@@ -50,10 +34,19 @@ interface GanttViewProps {
   tareas: Tarea[]
   tags: Tag[]
   sprints: Sprint[]
+  kanbanEstados: KanbanEstado[]
   onTaskClick: (t: Tarea) => void
 }
 
-export function GanttView({ tareas, tags, sprints, onTaskClick }: GanttViewProps) {
+export function GanttView({ tareas, tags, sprints, kanbanEstados, onTaskClick }: GanttViewProps) {
+  const estadoMap = useMemo(
+    () => Object.fromEntries(kanbanEstados.map((e) => [e.id, e])),
+    [kanbanEstados],
+  )
+  const getEstadoColor = (estadoId: string): string =>
+    estadoMap[estadoId]?.color ?? '#6B7280'
+  const getEstadoNombre = (estadoId: string): string =>
+    estadoMap[estadoId]?.nombre ?? '—'
   const [viewStart, setViewStart] = useState(() => startOfMonth(new Date()))
   const [mode, setMode] = useState<GanttMode>('tareas')
 
@@ -155,8 +148,8 @@ export function GanttView({ tareas, tags, sprints, onTaskClick }: GanttViewProps
         <div className="flex-1 relative h-full">
           {bar && (
             <div
-              className={`absolute top-1/2 -translate-y-1/2 h-5 rounded cursor-pointer transition-opacity opacity-80 hover:opacity-100 ${ESTADO_COLORS[t.estado_kanban]}`}
-              style={{ left: bar.left, width: bar.width, minWidth: '4px' }}
+              className="absolute top-1/2 -translate-y-1/2 h-5 rounded cursor-pointer transition-opacity opacity-80 hover:opacity-100"
+              style={{ left: bar.left, width: bar.width, minWidth: '4px', backgroundColor: getEstadoColor(t.estado_kanban) }}
               onClick={() => onTaskClick(t)}
               title={`${t.descripcion}\n${t.fecha_inicio} → ${t.fecha_fin}`}
             />
@@ -199,7 +192,7 @@ export function GanttView({ tareas, tags, sprints, onTaskClick }: GanttViewProps
                   className="flex items-center gap-2 px-3 py-2 rounded-md border border-border bg-card hover:border-primary/20 cursor-pointer text-xs transition-colors"
                   onClick={() => onTaskClick(t)}
                 >
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${ESTADO_COLORS[t.estado_kanban]}`} />
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: getEstadoColor(t.estado_kanban) }} />
                   <span className="flex-1 truncate">{t.descripcion}</span>
                   {tag && (
                     <span className="flex-shrink-0 flex items-center gap-1 text-muted-foreground">
@@ -392,10 +385,10 @@ export function GanttView({ tareas, tags, sprints, onTaskClick }: GanttViewProps
       {/* Leyenda (solo modos tareas y sprint) */}
       {mode !== 'global' && (
         <div className="flex flex-wrap gap-3">
-          {Object.entries(ESTADO_LABELS).map(([key, label]) => (
-            <div key={key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <div className={`h-2.5 w-5 rounded-sm ${ESTADO_COLORS[key]}`} />
-              {label}
+          {kanbanEstados.map((e) => (
+            <div key={e.id} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <div className="h-2.5 w-5 rounded-sm" style={{ backgroundColor: e.color }} />
+              {e.nombre}
             </div>
           ))}
         </div>
