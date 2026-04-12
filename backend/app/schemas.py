@@ -457,7 +457,7 @@ def _validate_github_url(v: Optional[str]) -> Optional[str]:
 
 class TareaCreate(BaseModel):
     descripcion: str
-    horas: float = Field(default=0.0, ge=0, le=24)
+    horas: float = Field(default=0.0, ge=0)
     fecha: date
     estado_pago: EstadoPago = EstadoPago.pendiente
     es_backlog: bool = False
@@ -479,7 +479,7 @@ class TareaCreate(BaseModel):
 
 class TareaUpdate(BaseModel):
     descripcion: Optional[str] = None
-    horas: Optional[float] = Field(default=None, ge=0, le=24)
+    horas: Optional[float] = Field(default=None, ge=0)
     fecha: Optional[date] = None
     estado_pago: Optional[EstadoPago] = None
     is_locked: Optional[bool] = None
@@ -526,6 +526,18 @@ class TareaOut(BaseModel):
     alerta_retainer: bool = False
     subtareas_total: int = 0
     subtareas_completadas: int = 0
+    model_config = {"from_attributes": True}
+
+
+# ── RegistroTiempo ────────────────────────────────────────────────────────────
+
+class RegistroTiempoOut(BaseModel):
+    id: uuid.UUID
+    tarea_id: uuid.UUID
+    inicio: datetime
+    fin: Optional[datetime]
+    duracion_horas: Optional[float]
+    created_at: datetime
     model_config = {"from_attributes": True}
 
 

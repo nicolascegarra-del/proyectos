@@ -36,6 +36,7 @@ from app.routers import (
     sync,
     tags,
     tareas,
+    tiempo,
     workspaces,
 )
 
@@ -175,6 +176,7 @@ app.include_router(sprints.router)
 app.include_router(kanban_estados.router)
 app.include_router(tareas.router)
 app.include_router(subtareas.router)
+app.include_router(tiempo.router)
 app.include_router(comentarios.router)
 app.include_router(gastos.router)
 app.include_router(presupuestos.router)

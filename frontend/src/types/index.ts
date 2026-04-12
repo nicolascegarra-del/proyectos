@@ -173,6 +173,15 @@ export interface Comentario {
   updated_at: string
 }
 
+export interface RegistroTiempo {
+  id: string
+  tarea_id: string
+  inicio: string
+  fin: string | null
+  duracion_horas: number | null
+  created_at: string
+}
+
 export interface Gasto {
   id: string
   proyecto_id: string

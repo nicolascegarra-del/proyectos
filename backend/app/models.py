@@ -338,6 +338,17 @@ class Comentario(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
+class RegistroTiempo(SQLModel, table=True):
+    __tablename__ = "registro_tiempo"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    tarea_id: uuid.UUID = Field(foreign_key="tarea.id", index=True)
+    inicio: datetime
+    fin: Optional[datetime] = None
+    duracion_horas: Optional[float] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+
 class Configuracion(SQLModel, table=True):
     __tablename__ = "configuracion"
 

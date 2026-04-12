@@ -3,6 +3,7 @@ import { format } from 'date-fns'
 import { api, getErrorMessage } from '@/lib/api'
 import type { Comentario, EstadoPago, Prioridad, Proyecto, Sprint, Subtarea, Tag, Tarea } from '@/types'
 import { today } from '@/lib/utils'
+import { TaskTimer } from '@/components/tareas/TaskTimer'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -481,7 +482,6 @@ export function TareaModal({
                 <Input
                   type="number"
                   min="0"
-                  max="24"
                   step="0.25"
                   value={form.horas}
                   onChange={(e) => set('horas', e.target.value)}
@@ -645,6 +645,23 @@ export function TareaModal({
                 </div>
               )}
             </div>
+
+            {/* Cronómetro (solo en edición) */}
+            {isEdit && tarea && (
+              <div className="border border-border/50 rounded-md overflow-hidden">
+                <div className="flex items-center gap-2 px-3 py-2 bg-muted/30">
+                  <span className="text-xs font-medium text-muted-foreground">Cronómetro</span>
+                </div>
+                <div className="px-3 pb-3 pt-2">
+                  <TaskTimer
+                    tareaId={tarea.id}
+                    proyectoId={efectiveProyectoId}
+                    workspaceId={workspaceId}
+                    onHorasUpdated={(newHoras) => set('horas', newHoras.toString())}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Comentarios (solo en edición) */}
             {isEdit && (
