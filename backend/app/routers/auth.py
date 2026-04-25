@@ -40,7 +40,7 @@ _COOKIE_OPTS = dict(
     httponly=True,
     samesite="lax",
     secure=settings.FRONTEND_URL.startswith("https"),
-    path="/auth",
+    path="/api/auth",  # must match the browser-visible path via Nginx /api/ proxy
     max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
 )
 
@@ -50,7 +50,7 @@ def _set_refresh_cookie(response: Response, token: str) -> None:
 
 
 def _clear_refresh_cookie(response: Response) -> None:
-    response.delete_cookie(_COOKIE_NAME, path="/auth")
+    response.delete_cookie(_COOKIE_NAME, path="/api/auth")
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
