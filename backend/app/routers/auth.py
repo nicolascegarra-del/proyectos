@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, HTTPException, Request, Response, status
 
 logger = logging.getLogger(__name__)
+from sqlalchemy import or_
 from sqlmodel import select
 
 from app.core.dependencies import get_current_user
@@ -146,13 +147,24 @@ async def login(
 
     access_token = create_access_token(str(user.id), user.email)
     refresh_token_str = create_refresh_token()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     refresh_token = RefreshToken(
         user_id=user.id,
         token=refresh_token_str,
-        expires_at=datetime.now(timezone.utc).replace(tzinfo=None)
-        + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        expires_at=now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
     )
     session.add(refresh_token)
+
+    # Eliminar tokens expirados o revocados del usuario para evitar acumulación
+    expired = await session.exec(
+        select(RefreshToken).where(
+            RefreshToken.user_id == user.id,
+            or_(RefreshToken.expires_at < now, RefreshToken.revoked == True),
+        )
+    )
+    for old_token in expired.all():
+        await session.delete(old_token)
+
     await session.commit()
 
     logger.info("Successful login user_id=%s email=%s", user.id, user.email)
