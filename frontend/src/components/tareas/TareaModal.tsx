@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Textarea } from '@/components/ui/textarea'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import {
   Dialog,
   DialogContent,
@@ -86,11 +87,26 @@ export function TareaModal({
   const fileRef = useRef<HTMLInputElement>(null)
   const pendingFileRef = useRef<File | null>(null)
 
-  // Subtareas
+  // Subtareas existentes (modo edición)
   const [subtareas, setSubtareas] = useState<Subtarea[]>([])
   const [newSubtarea, setNewSubtarea] = useState('')
   const [savingSubtarea, setSavingSubtarea] = useState(false)
   const [loadingSubtareas, setLoadingSubtareas] = useState(false)
+
+  // Borrador de subtareas (modo creación): se envían inline con el POST de la tarea
+  type DraftSubtarea = {
+    descripcion: string
+    fecha_inicio: string
+    fecha_fin: string
+    horas_estimadas: string
+  }
+  const [draftSubtareas, setDraftSubtareas] = useState<DraftSubtarea[]>([])
+  const emptyDraft = (): DraftSubtarea => ({
+    descripcion: '',
+    fecha_inicio: '',
+    fecha_fin: '',
+    horas_estimadas: '',
+  })
 
   // Comentarios
   const [comentarios, setComentarios] = useState<Comentario[]>([])
@@ -127,6 +143,7 @@ export function TareaModal({
         setShowExtras(false)
         setSubtareas([])
         setComentarios([])
+        setDraftSubtareas([])
       }
       setDescError(false)
       pendingFileRef.current = null
@@ -229,6 +246,16 @@ export function TareaModal({
         )
         savedTarea = data
       } else {
+        // En creación adjuntamos las subtareas para crearlas en la misma request
+        const cleanDrafts = draftSubtareas
+          .map(d => ({
+            descripcion: d.descripcion.trim(),
+            fecha_inicio: d.fecha_inicio || null,
+            fecha_fin: d.fecha_fin || null,
+            horas_estimadas: d.horas_estimadas === '' ? null : parseFloat(d.horas_estimadas) || null,
+          }))
+          .filter(d => d.descripcion.length > 0)
+        payload.subtareas = cleanDrafts
         const { data } = await api.post<Tarea>(
           `/workspaces/${workspaceId}/proyectos/${efectiveProyectoId}/tareas`,
           payload,
@@ -280,6 +307,31 @@ export function TareaModal({
     } finally {
       setSavingSubtarea(false)
     }
+  }
+
+  const handleSaveSubtareaField = async (s: Subtarea) => {
+    if (!tarea) return
+    try {
+      const { data } = await api.put<Subtarea>(
+        `/workspaces/${workspaceId}/proyectos/${efectiveProyectoId}/tareas/${tarea.id}/subtareas/${s.id}`,
+        {
+          descripcion: s.descripcion,
+          fecha_inicio: s.fecha_inicio,
+          fecha_fin: s.fecha_fin,
+          horas_estimadas: s.horas_estimadas,
+        },
+      )
+      setSubtareas(prev => prev.map(x => x.id === data.id ? data : x))
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    }
+  }
+
+  const updateSubtareaField = (s: Subtarea, field: 'fecha_inicio' | 'fecha_fin', value: string | null) => {
+    const updated = { ...s, [field]: value }
+    setSubtareas(prev => prev.map(x => x.id === s.id ? updated : x))
+    // Auto-guardar inmediatamente para fechas (no esperan blur)
+    handleSaveSubtareaField(updated)
   }
 
   const handleToggleSubtarea = async (subtarea: Subtarea) => {
@@ -385,66 +437,92 @@ export function TareaModal({
               )}
             </div>
 
-            {/* Descripción larga */}
+            {/* Descripción larga (rich text) */}
             <div className="space-y-1.5">
               <Label>Descripción detallada</Label>
-              <Textarea
-                rows={5}
+              <RichTextEditor
                 value={form.descripcion_larga}
-                onChange={(e) => set('descripcion_larga', e.target.value)}
+                onChange={(v) => set('descripcion_larga', v)}
                 placeholder="Contexto, criterios de aceptación, notas..."
-                className="resize-y"
               />
             </div>
 
-            {/* Subtareas (solo en edición) */}
-            {isEdit && (
-              <div className="border border-border/50 rounded-md overflow-hidden">
-                <div className="flex items-center justify-between px-3 py-2 bg-muted/30">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    Subtareas
-                    {subtareas.length > 0 && (
-                      <span className="ml-1.5 text-muted-foreground/60">
-                        {completadas}/{subtareas.length}
-                      </span>
-                    )}
-                  </span>
-                  {subtareas.length > 0 && (
-                    <div className="flex-1 mx-3 h-1 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-green-500 rounded-full transition-all"
-                        style={{ width: `${(completadas / subtareas.length) * 100}%` }}
-                      />
-                    </div>
+            {/* Subtareas: visibles tanto en creación como en edición */}
+            <div className="border border-border/50 rounded-md overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2 bg-muted/30">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Subtareas
+                  {isEdit && subtareas.length > 0 && (
+                    <span className="ml-1.5 text-muted-foreground/60">
+                      {completadas}/{subtareas.length}
+                    </span>
                   )}
-                </div>
+                </span>
+                {isEdit && subtareas.length > 0 && (
+                  <div className="flex-1 mx-3 h-1 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-green-500 rounded-full transition-all"
+                      style={{ width: `${(completadas / subtareas.length) * 100}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {isEdit ? (
                 <div className="px-3 pb-3 pt-2 space-y-2">
                   {loadingSubtareas ? (
                     <p className="text-xs text-muted-foreground">Cargando...</p>
                   ) : (
                     subtareas.map((s) => (
-                      <div key={s.id} className="flex items-center gap-2 group/sub">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleSubtarea(s)}
-                          className={`flex-shrink-0 h-4 w-4 rounded border transition-colors flex items-center justify-center ${
-                            s.completada
-                              ? 'bg-green-500 border-green-500 text-white'
-                              : 'border-border hover:border-primary'
-                          }`}
-                        >
-                          {s.completada && <Check className="h-2.5 w-2.5" />}
-                        </button>
-                        <span className={`text-sm flex-1 min-w-0 ${s.completada ? 'line-through text-muted-foreground' : ''}`}>
-                          {s.descripcion}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteSubtarea(s)}
-                          className="flex-shrink-0 opacity-0 group-hover/sub:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
+                      <div key={s.id} className="group/sub space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleSubtarea(s)}
+                            className={`flex-shrink-0 h-4 w-4 rounded border transition-colors flex items-center justify-center ${
+                              s.completada
+                                ? 'bg-green-500 border-green-500 text-white'
+                                : 'border-border hover:border-primary'
+                            }`}
+                          >
+                            {s.completada && <Check className="h-2.5 w-2.5" />}
+                          </button>
+                          <Input
+                            value={s.descripcion}
+                            onChange={(e) => setSubtareas(prev => prev.map(x => x.id === s.id ? { ...x, descripcion: e.target.value } : x))}
+                            onBlur={() => handleSaveSubtareaField(s)}
+                            className={`h-7 text-xs flex-1 ${s.completada ? 'line-through text-muted-foreground' : ''}`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSubtarea(s)}
+                            className="flex-shrink-0 opacity-0 group-hover/sub:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 pl-6">
+                          <DatePicker
+                            value={s.fecha_inicio ?? ''}
+                            onChange={(v) => updateSubtareaField(s, 'fecha_inicio', v || null)}
+                            placeholder="Inicio"
+                          />
+                          <DatePicker
+                            value={s.fecha_fin ?? ''}
+                            onChange={(v) => updateSubtareaField(s, 'fecha_fin', v || null)}
+                            placeholder="Fin"
+                          />
+                          <Input
+                            type="number"
+                            min={0}
+                            step={0.25}
+                            value={s.horas_estimadas ?? ''}
+                            onChange={(e) => setSubtareas(prev => prev.map(x => x.id === s.id ? { ...x, horas_estimadas: e.target.value === '' ? null : parseFloat(e.target.value) } : x))}
+                            onBlur={() => handleSaveSubtareaField(s)}
+                            placeholder="h"
+                            className="h-8"
+                          />
+                        </div>
                       </div>
                     ))
                   )}
@@ -468,8 +546,65 @@ export function TareaModal({
                     </Button>
                   </div>
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="px-3 pb-3 pt-2 space-y-2">
+                  {draftSubtareas.length === 0 && (
+                    <p className="text-xs text-muted-foreground/60 italic">
+                      Añade subtareas que se crearán junto con esta tarea.
+                    </p>
+                  )}
+                  {draftSubtareas.map((d, i) => (
+                    <div key={i} className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={d.descripcion}
+                          onChange={(e) => setDraftSubtareas(prev => prev.map((x, idx) => idx === i ? { ...x, descripcion: e.target.value } : x))}
+                          placeholder="Descripción de la subtarea"
+                          className="h-7 text-xs flex-1"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setDraftSubtareas(prev => prev.filter((_, idx) => idx !== i))}
+                          className="text-muted-foreground hover:text-destructive"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <DatePicker
+                          value={d.fecha_inicio}
+                          onChange={(v) => setDraftSubtareas(prev => prev.map((x, idx) => idx === i ? { ...x, fecha_inicio: v } : x))}
+                          placeholder="Inicio"
+                        />
+                        <DatePicker
+                          value={d.fecha_fin}
+                          onChange={(v) => setDraftSubtareas(prev => prev.map((x, idx) => idx === i ? { ...x, fecha_fin: v } : x))}
+                          placeholder="Fin"
+                        />
+                        <Input
+                          type="number"
+                          min={0}
+                          step={0.25}
+                          value={d.horas_estimadas}
+                          onChange={(e) => setDraftSubtareas(prev => prev.map((x, idx) => idx === i ? { ...x, horas_estimadas: e.target.value } : x))}
+                          placeholder="h"
+                          className="h-8"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => setDraftSubtareas(prev => [...prev, emptyDraft()])}
+                  >
+                    <Plus className="h-3 w-3 mr-1" /> Añadir subtarea
+                  </Button>
+                </div>
+              )}
+            </div>
 
             {/* Fecha y horas */}
             <div className="grid grid-cols-2 gap-3">

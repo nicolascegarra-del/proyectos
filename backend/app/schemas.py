@@ -455,6 +455,14 @@ def _validate_github_url(v: Optional[str]) -> Optional[str]:
     return v
 
 
+class _SubtareaInline(BaseModel):
+    """Subtarea embebida en TareaCreate (no requiere tarea_id; se asigna en backend)."""
+    descripcion: str = Field(max_length=500)
+    fecha_inicio: Optional[date] = None
+    fecha_fin: Optional[date] = None
+    horas_estimadas: Optional[float] = Field(default=None, ge=0)
+
+
 class TareaCreate(BaseModel):
     descripcion: str
     horas: float = Field(default=0.0, ge=0)
@@ -470,6 +478,7 @@ class TareaCreate(BaseModel):
     complejidad: Optional[int] = Field(default=None, ge=1, le=9)
     fecha_inicio: Optional[date] = None
     fecha_fin: Optional[date] = None
+    subtareas: list[_SubtareaInline] = Field(default_factory=list)
 
     @field_validator("github_url")
     @classmethod
@@ -545,11 +554,17 @@ class RegistroTiempoOut(BaseModel):
 
 class SubtareaCreate(BaseModel):
     descripcion: str = Field(max_length=500)
+    fecha_inicio: Optional[date] = None
+    fecha_fin: Optional[date] = None
+    horas_estimadas: Optional[float] = Field(default=None, ge=0)
 
 
 class SubtareaUpdate(BaseModel):
     descripcion: Optional[str] = Field(default=None, max_length=500)
     completada: Optional[bool] = None
+    fecha_inicio: Optional[date] = None
+    fecha_fin: Optional[date] = None
+    horas_estimadas: Optional[float] = Field(default=None, ge=0)
 
 
 class SubtareaOut(BaseModel):
@@ -557,6 +572,9 @@ class SubtareaOut(BaseModel):
     tarea_id: uuid.UUID
     descripcion: str
     completada: bool
+    fecha_inicio: Optional[date] = None
+    fecha_fin: Optional[date] = None
+    horas_estimadas: Optional[float] = None
     created_at: datetime
     updated_at: datetime
     model_config = {"from_attributes": True}
@@ -812,3 +830,43 @@ class SuperadminUserWorkspaceOut(BaseModel):
 
 class ResetPasswordOut(BaseModel):
     new_password: str
+
+
+# ── NotaProyecto ──────────────────────────────────────────────────────────────
+
+class NotaCreate(BaseModel):
+    texto: str = Field(min_length=1, max_length=4000)
+
+
+class NotaOut(BaseModel):
+    id: uuid.UUID
+    proyecto_id: uuid.UUID
+    user_id: uuid.UUID
+    texto: str
+    created_at: datetime
+    autor_nombre: Optional[str] = None
+    autor_email: Optional[str] = None
+    autor_avatar_url: Optional[str] = None
+    model_config = {"from_attributes": True}
+
+
+# ── ProyectoMiembro ───────────────────────────────────────────────────────────
+
+class ProyectoMiembroCreate(BaseModel):
+    user_id: uuid.UUID
+    horas_semana: float = Field(default=0.0, ge=0)
+
+
+class ProyectoMiembroUpdate(BaseModel):
+    horas_semana: Optional[float] = Field(default=None, ge=0)
+
+
+class ProyectoMiembroOut(BaseModel):
+    id: uuid.UUID
+    proyecto_id: uuid.UUID
+    user_id: uuid.UUID
+    horas_semana: float
+    created_at: datetime
+    updated_at: datetime
+    user: Optional[UserPublicOut] = None
+    model_config = {"from_attributes": True}

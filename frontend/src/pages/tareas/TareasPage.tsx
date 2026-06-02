@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useWorkspaceStore } from '@/store/workspaceStore'
 import { api, getErrorMessage } from '@/lib/api'
-import type { EstadoPago, Proyecto, Tag, Tarea } from '@/types'
-import { formatHoras, formatDate } from '@/lib/utils'
+import type { EstadoPago, KanbanEstado, Proyecto, Tag, Tarea } from '@/types'
+import { formatHoras } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { DatePicker } from '@/components/ui/date-picker'
 import { Lock, Plus, Pencil } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from '@/components/ui/use-toast'
@@ -21,6 +22,7 @@ export default function TareasPage() {
   const [proyectos, setProyectos] = useState<Proyecto[]>([])
   const [tareas, setTareas] = useState<Tarea[]>([])
   const [tags, setTags] = useState<Tag[]>([])
+  const [kanbanByProyecto, setKanbanByProyecto] = useState<Map<string, KanbanEstado[]>>(new Map())
   const [loading, setLoading] = useState(true)
   const [filterProyecto, setFilterProyecto] = useState<string>('all')
   const [filterEstado, setFilterEstado] = useState<string>('all')
@@ -32,10 +34,19 @@ export default function TareasPage() {
     try {
       const pRes = await api.get<Proyecto[]>(`/workspaces/${currentWorkspace.id}/proyectos`)
       setProyectos(pRes.data)
-      const results = await Promise.all(
-        pRes.data.map((p) => api.get<Tarea[]>(`/workspaces/${currentWorkspace.id}/proyectos/${p.id}/tareas`))
-      )
-      setTareas(results.flatMap((r) => r.data))
+      const [tareasRes, kanbanRes] = await Promise.all([
+        Promise.all(
+          pRes.data.map((p) => api.get<Tarea[]>(`/workspaces/${currentWorkspace.id}/proyectos/${p.id}/tareas`))
+        ),
+        Promise.all(
+          pRes.data.map((p) =>
+            api.get<KanbanEstado[]>(`/workspaces/${currentWorkspace.id}/proyectos/${p.id}/kanban-estados`)
+              .then(r => [p.id, r.data] as const)
+          )
+        ),
+      ])
+      setTareas(tareasRes.flatMap((r) => r.data))
+      setKanbanByProyecto(new Map(kanbanRes))
       const tagsRes = await api.get<Tag[]>(`/workspaces/${currentWorkspace.id}/tags`)
       setTags(tagsRes.data)
     } catch (err) {
@@ -67,6 +78,19 @@ export default function TareasPage() {
       const { data } = await api.put<Tarea>(
         `/workspaces/${currentWorkspace.id}/proyectos/${tarea.proyecto_id}/tareas/${tarea.id}`,
         { is_locked: !tarea.is_locked },
+      )
+      setTareas((t) => t.map((task) => (task.id === data.id ? data : task)))
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    }
+  }
+
+  const handleUpdateFecha = async (tarea: Tarea, field: 'fecha_inicio' | 'fecha_fin', value: string) => {
+    if (!currentWorkspace) return
+    try {
+      const { data } = await api.put<Tarea>(
+        `/workspaces/${currentWorkspace.id}/proyectos/${tarea.proyecto_id}/tareas/${tarea.id}`,
+        { [field]: value || null },
       )
       setTareas((t) => t.map((task) => (task.id === data.id ? data : task)))
     } catch (err) {
@@ -174,56 +198,85 @@ export default function TareasPage() {
           filtered.map((tarea) => {
             const proyecto = proyectoMap.get(tarea.proyecto_id)
             const tag = tarea.tag_id ? tagMap.get(tarea.tag_id) : undefined
+            const kanbanList = kanbanByProyecto.get(tarea.proyecto_id) || []
+            const kanbanEstado = kanbanList.find(k => k.id === tarea.estado_kanban)
             return (
               <div
                 key={tarea.id}
-                className="flex items-center gap-3 bg-card border border-border rounded-md px-4 py-3 hover:border-primary/20 transition-colors cursor-pointer"
-                onClick={() => setModalTarea(tarea)}
+                className="bg-card border border-border rounded-md px-4 py-3 hover:border-primary/20 transition-colors space-y-2"
               >
-                <div className="flex-1 min-w-0 space-y-0.5">
-                  <p className="text-sm truncate">{tarea.descripcion}</p>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span>{proyecto?.nombre ?? '—'}</span>
-                    <span>·</span>
-                    <span>{formatDate(tarea.fecha)}</span>
-                    {tag && (
-                      <>
-                        <span>·</span>
-                        <span className="inline-flex items-center gap-1" style={{ color: tag.color }}>
-                          <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                          {tag.nombre}
-                        </span>
-                      </>
+                <div className="flex items-center gap-3 cursor-pointer" onClick={() => setModalTarea(tarea)}>
+                  <div className="flex-1 min-w-0 space-y-0.5">
+                    <p className="text-sm truncate">{tarea.descripcion}</p>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span>{proyecto?.nombre ?? '—'}</span>
+                      {tag && (
+                        <>
+                          <span>·</span>
+                          <span className="inline-flex items-center gap-1" style={{ color: tag.color }}>
+                            <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                            {tag.nombre}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                    {kanbanEstado && (
+                      <span
+                        className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                        style={{
+                          backgroundColor: `${kanbanEstado.color}20`,
+                          color: kanbanEstado.color,
+                          border: `1px solid ${kanbanEstado.color}40`,
+                        }}
+                        title={`Carril Kanban: ${kanbanEstado.nombre}`}
+                      >
+                        {kanbanEstado.nombre}
+                      </span>
                     )}
+                    <span className="text-sm font-medium tabular-nums">{formatHoras(tarea.horas)}</span>
+                    <Select
+                      value={tarea.estado_pago}
+                      onValueChange={(v) => handleUpdateEstadoPago(tarea, v as EstadoPago)}
+                      disabled={tarea.is_locked}
+                    >
+                      <SelectTrigger className={`h-7 w-28 text-xs border ${ESTADO_PAGO_COLORS[tarea.estado_pago]}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pendiente">Pendiente</SelectItem>
+                        <SelectItem value="facturado">Facturado</SelectItem>
+                        <SelectItem value="cobrado">Cobrado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => handleToggleLock(tarea)}
+                      title={tarea.is_locked ? 'Desbloquear' : 'Bloquear'}
+                    >
+                      <Lock className={`h-3.5 w-3.5 ${tarea.is_locked ? 'text-yellow-500' : 'text-muted-foreground'}`} />
+                    </Button>
+                    <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                  <span className="text-sm font-medium tabular-nums">{formatHoras(tarea.horas)}</span>
-                  <Select
-                    value={tarea.estado_pago}
-                    onValueChange={(v) => handleUpdateEstadoPago(tarea, v as EstadoPago)}
-                    disabled={tarea.is_locked}
-                  >
-                    <SelectTrigger className={`h-7 w-28 text-xs border ${ESTADO_PAGO_COLORS[tarea.estado_pago]}`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pendiente">Pendiente</SelectItem>
-                      <SelectItem value="facturado">Facturado</SelectItem>
-                      <SelectItem value="cobrado">Cobrado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => handleToggleLock(tarea)}
-                    title={tarea.is_locked ? 'Desbloquear' : 'Bloquear'}
-                  >
-                    <Lock className={`h-3.5 w-3.5 ${tarea.is_locked ? 'text-yellow-500' : 'text-muted-foreground'}`} />
-                  </Button>
-                  <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                <div className="flex items-center gap-2 text-xs text-muted-foreground pl-0.5" onClick={(e) => e.stopPropagation()}>
+                  <span className="w-12 shrink-0">Inicio:</span>
+                  <DatePicker
+                    value={tarea.fecha_inicio ?? ''}
+                    onChange={(v) => handleUpdateFecha(tarea, 'fecha_inicio', v)}
+                    placeholder="—"
+                  />
+                  <span className="w-8 shrink-0 pl-2">Fin:</span>
+                  <DatePicker
+                    value={tarea.fecha_fin ?? ''}
+                    onChange={(v) => handleUpdateFecha(tarea, 'fecha_fin', v)}
+                    placeholder="—"
+                  />
                 </div>
               </div>
             )

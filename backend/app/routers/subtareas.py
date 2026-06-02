@@ -69,7 +69,13 @@ async def create_subtarea(
     tarea = await _get_tarea_or_404(workspace_id, proyecto_id, tarea_id, session)
     if tarea.is_locked:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="La tarea está bloqueada")
-    subtarea = Subtarea(tarea_id=tarea_id, descripcion=data.descripcion)
+    subtarea = Subtarea(
+        tarea_id=tarea_id,
+        descripcion=data.descripcion,
+        fecha_inicio=data.fecha_inicio,
+        fecha_fin=data.fecha_fin,
+        horas_estimadas=data.horas_estimadas,
+    )
     session.add(subtarea)
     await session.commit()
     await session.refresh(subtarea)
@@ -96,10 +102,10 @@ async def update_subtarea(
     subtarea = result.first()
     if not subtarea:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subtarea no encontrada")
-    if data.descripcion is not None:
-        subtarea.descripcion = data.descripcion
-    if data.completada is not None:
-        subtarea.completada = data.completada
+    payload = data.model_dump(exclude_unset=True)
+    for field in ("descripcion", "completada", "fecha_inicio", "fecha_fin", "horas_estimadas"):
+        if field in payload:
+            setattr(subtarea, field, payload[field])
     subtarea.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     session.add(subtarea)
     await session.commit()

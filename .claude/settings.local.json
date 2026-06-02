@@ -10,7 +10,14 @@
       "Read(//tmp/**)",
       "Bash(docker cp:*)",
       "Bash(find 'C:/Users/nicol/OneDrive/PROYECTOS/KLYP/GESTION DE PROYECTOS/frontend' -type f \\\\\\(-name *.png -o -name *.jpg -o -name *.svg -o -name *.ico \\\\\\))",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(git push *)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\nicol\\\\OneDrive\\\\PROYECTOS\\\\KLYP\\\\GESTION DE PROYECTOS\" -Recurse -Directory)",
+      "Bash(Select-Object -First 30)",
+      "Bash(Format-Table FullName)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\nicol\\\\OneDrive\\\\PROYECTOS\\\\KLYP\\\\GESTION DE PROYECTOS\" -Directory)",
+      "Bash(Select-Object Name)",
+      "Bash(Get-ChildItem -Path . -Recurse -Name)"
     ]
   }
 }

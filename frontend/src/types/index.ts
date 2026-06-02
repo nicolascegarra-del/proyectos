@@ -161,8 +161,32 @@ export interface Subtarea {
   tarea_id: string
   descripcion: string
   completada: boolean
+  fecha_inicio: string | null
+  fecha_fin: string | null
+  horas_estimadas: number | null
   created_at: string
   updated_at: string
+}
+
+export interface NotaProyecto {
+  id: string
+  proyecto_id: string
+  user_id: string
+  texto: string
+  created_at: string
+  autor_nombre: string | null
+  autor_email: string | null
+  autor_avatar_url: string | null
+}
+
+export interface ProyectoMiembro {
+  id: string
+  proyecto_id: string
+  user_id: string
+  horas_semana: number
+  created_at: string
+  updated_at: string
+  user?: User
 }
 
 export interface Comentario {

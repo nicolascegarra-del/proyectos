@@ -26,7 +26,9 @@ from app.routers import (
     dashboard,
     gastos,
     kanban_estados,
+    notas_proyecto,
     presupuestos,
+    proyecto_miembros,
     proyectos,
     public,
     smtp,
@@ -178,6 +180,8 @@ app.include_router(tareas.router)
 app.include_router(subtareas.router)
 app.include_router(tiempo.router)
 app.include_router(comentarios.router)
+app.include_router(notas_proyecto.router)
+app.include_router(proyecto_miembros.router)
 app.include_router(gastos.router)
 app.include_router(presupuestos.router)
 app.include_router(articulos.router)

@@ -29,6 +29,7 @@ from app.models import (
 )
 from app.schemas import TareaCreate, TareaOut, TareaUpdate
 from app.services.limits import ResourceType, check_limit
+from app.services.sanitize import sanitize_html
 from app.services.webhook import trigger_webhook_background
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/proyectos/{proyecto_id}/tareas", tags=["tareas"])
@@ -156,17 +157,38 @@ async def create_tarea(
         estado_kanban_id = first_estado.id
 
     tarea_data = data.model_dump()
-    tarea_data['estado_kanban'] = estado_kanban_id
+    subtareas_payload = tarea_data.pop("subtareas", []) or []
+    tarea_data["estado_kanban"] = estado_kanban_id
+    tarea_data["descripcion_larga"] = sanitize_html(tarea_data.get("descripcion_larga"))
     tarea = Tarea(proyecto_id=proyecto_id, **tarea_data)
     session.add(tarea)
+    await session.flush()
+
+    for sub in subtareas_payload:
+        if not sub.get("descripcion") or not sub["descripcion"].strip():
+            continue
+        session.add(
+            Subtarea(
+                tarea_id=tarea.id,
+                descripcion=sub["descripcion"].strip(),
+                fecha_inicio=sub.get("fecha_inicio"),
+                fecha_fin=sub.get("fecha_fin"),
+                horas_estimadas=sub.get("horas_estimadas"),
+            )
+        )
+
     await session.commit()
     await session.refresh(tarea)
 
     alerta_horas, alerta_retainer = await _check_alerts(proyecto, session)
+    counts = await _get_subtarea_counts([tarea.id], session)
 
     out = TareaOut.model_validate(tarea)
     out.alerta_horas = alerta_horas
     out.alerta_retainer = alerta_retainer
+    total, hechas = counts.get(tarea.id, (0, 0))
+    out.subtareas_total = total
+    out.subtareas_completadas = hechas
     return out
 
 
@@ -230,7 +252,10 @@ async def update_tarea(
     # Handle nullable fields that can be explicitly cleared to None
     if 'sprint_id' in data.model_fields_set:
         tarea.sprint_id = data.sprint_id
-    for field, value in data.model_dump(exclude_none=True).items():
+    payload = data.model_dump(exclude_none=True)
+    if "descripcion_larga" in payload:
+        payload["descripcion_larga"] = sanitize_html(payload["descripcion_larga"])
+    for field, value in payload.items():
         if field == 'sprint_id':
             continue  # already handled above
         setattr(tarea, field, value)

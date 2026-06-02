@@ -324,6 +324,36 @@ class Subtarea(SQLModel, table=True):
     tarea_id: uuid.UUID = Field(foreign_key="tarea.id", index=True)
     descripcion: str = Field(max_length=500)
     completada: bool = False
+    fecha_inicio: Optional[date] = None
+    fecha_fin: Optional[date] = None
+    horas_estimadas: Optional[float] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+
+class NotaProyecto(SQLModel, table=True):
+    __tablename__ = "nota_proyecto"
+    __table_args__ = (
+        Index("ix_nota_proyecto_created", "proyecto_id", "created_at"),
+    )
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    proyecto_id: uuid.UUID = Field(foreign_key="proyecto.id", index=True)
+    user_id: uuid.UUID = Field(foreign_key="user.id", index=True)
+    texto: str = Field(max_length=4000)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+
+class ProyectoMiembro(SQLModel, table=True):
+    __tablename__ = "proyecto_miembro"
+    __table_args__ = (
+        Index("ix_proyecto_miembro_unique", "proyecto_id", "user_id", unique=True),
+    )
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    proyecto_id: uuid.UUID = Field(foreign_key="proyecto.id", index=True)
+    user_id: uuid.UUID = Field(foreign_key="user.id", index=True)
+    horas_semana: float = 0.0
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 

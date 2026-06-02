@@ -26,6 +26,10 @@ import { exportSprintsExcel, exportSprintsPDF, exportTareasExcel, exportGastosEx
 import { toast } from '@/components/ui/use-toast'
 import { enqueueSync, db, upsertLocal } from '@/lib/db'
 import { useSyncStore } from '@/store/syncStore'
+import { useAuthStore } from '@/store/authStore'
+import { NotasTab } from '@/components/proyectos/NotasTab'
+import { EquipoTab } from '@/components/proyectos/EquipoTab'
+import type { RolWorkspace, WorkspaceMember } from '@/types'
 
 export default function ProyectoDetailPage() {
   const { proyectoId } = useParams({ strict: false }) as { proyectoId: string }
@@ -33,6 +37,8 @@ export default function ProyectoDetailPage() {
   const online = useSyncStore((s) => s.online)
   const { incrementPending } = useSyncStore()
   const navigate = useNavigate()
+  const currentUser = useAuthStore((s) => s.user)
+  const [currentRol, setCurrentRol] = useState<RolWorkspace | undefined>()
 
   const [proyecto, setProyecto] = useState<Proyecto | null>(null)
   const [tareas, setTareas] = useState<Tarea[]>([])
@@ -90,6 +96,16 @@ export default function ProyectoDetailPage() {
       )
       const active = ciclosRes.data.find((c) => c.is_active) ?? null
       setCiclo(active)
+
+      if (currentUser) {
+        try {
+          const wsMembers = await api.get<WorkspaceMember[]>(`/workspaces/${currentWorkspace.id}/members`)
+          const me = wsMembers.data.find(m => m.user_id === currentUser.id)
+          setCurrentRol(me?.rol)
+        } catch {
+          // sin permisos para listar miembros: dejamos rol undefined
+        }
+      }
     } catch (err) {
       toast({ title: getErrorMessage(err), variant: 'destructive' })
     } finally {
@@ -547,6 +563,8 @@ export default function ProyectoDetailPage() {
           <TabsTrigger value="gantt" className="text-sm">Gantt</TabsTrigger>
           <TabsTrigger value="sprints" className="text-sm">Sprints</TabsTrigger>
           <TabsTrigger value="gastos" className="text-sm">Gastos</TabsTrigger>
+          <TabsTrigger value="equipo" className="text-sm">Equipo</TabsTrigger>
+          <TabsTrigger value="notas" className="text-sm">Notas</TabsTrigger>
         </TabsList>
         <TabsContent value="kanban" className="mt-3">
           <div className="space-y-3">
@@ -814,6 +832,12 @@ export default function ProyectoDetailPage() {
               ))
             )}
           </div>
+        </TabsContent>
+        <TabsContent value="equipo" className="mt-3">
+          <EquipoTab proyectoId={proyectoId} currentRol={currentRol} />
+        </TabsContent>
+        <TabsContent value="notas" className="mt-3">
+          <NotasTab proyectoId={proyectoId} currentRol={currentRol} />
         </TabsContent>
       </Tabs>
 
