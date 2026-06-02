@@ -12,6 +12,7 @@ async def test_tarea_locked_no_editable(
     auth_headers: dict,
     session: AsyncSession,
     proyecto: Proyecto,
+    kanban_estado,
     workspace,
 ):
     tarea = Tarea(
@@ -20,6 +21,7 @@ async def test_tarea_locked_no_editable(
         horas=2.0,
         fecha=date.today(),
         is_locked=True,
+        estado_kanban=kanban_estado.id,
     )
     session.add(tarea)
     await session.commit()
@@ -40,6 +42,7 @@ async def test_tarea_locked_no_eliminable(
     auth_headers: dict,
     session: AsyncSession,
     proyecto: Proyecto,
+    kanban_estado,
     workspace,
 ):
     tarea = Tarea(
@@ -48,6 +51,7 @@ async def test_tarea_locked_no_eliminable(
         horas=1.0,
         fecha=date.today(),
         is_locked=True,
+        estado_kanban=kanban_estado.id,
     )
     session.add(tarea)
     await session.commit()
@@ -67,6 +71,7 @@ async def test_tarea_unlocked_editable(
     auth_headers: dict,
     session: AsyncSession,
     proyecto: Proyecto,
+    kanban_estado,
     workspace,
 ):
     tarea = Tarea(
@@ -75,6 +80,7 @@ async def test_tarea_unlocked_editable(
         horas=1.0,
         fecha=date.today(),
         is_locked=False,
+        estado_kanban=kanban_estado.id,
     )
     session.add(tarea)
     await session.commit()

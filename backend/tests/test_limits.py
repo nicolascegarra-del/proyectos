@@ -92,6 +92,7 @@ async def test_limite_tareas_por_proyecto(
     user: User,
     plan: Plan,
     proyecto,
+    kanban_estado,
     workspace,
 ):
     from datetime import date
@@ -102,8 +103,8 @@ async def test_limite_tareas_por_proyecto(
 
     from app.models import Tarea
 
-    t1 = Tarea(proyecto_id=proyecto.id, descripcion="T1", horas=1.0, fecha=date.today())
-    t2 = Tarea(proyecto_id=proyecto.id, descripcion="T2", horas=1.0, fecha=date.today())
+    t1 = Tarea(proyecto_id=proyecto.id, descripcion="T1", horas=1.0, fecha=date.today(), estado_kanban=kanban_estado.id)
+    t2 = Tarea(proyecto_id=proyecto.id, descripcion="T2", horas=1.0, fecha=date.today(), estado_kanban=kanban_estado.id)
     session.add(t1)
     session.add(t2)
     await session.commit()

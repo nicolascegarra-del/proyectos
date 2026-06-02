@@ -54,9 +54,10 @@ async def test_presupuesto_total_calculado_correctamente(
 async def test_margen_neto(
     session: AsyncSession,
     proyecto: Proyecto,
+    kanban_estado,
 ):
-    tarea1 = Tarea(proyecto_id=proyecto.id, descripcion="T1", horas=5.0, fecha=date.today())
-    tarea2 = Tarea(proyecto_id=proyecto.id, descripcion="T2", horas=3.0, fecha=date.today())
+    tarea1 = Tarea(proyecto_id=proyecto.id, descripcion="T1", horas=5.0, fecha=date.today(), estado_kanban=kanban_estado.id)
+    tarea2 = Tarea(proyecto_id=proyecto.id, descripcion="T2", horas=3.0, fecha=date.today(), estado_kanban=kanban_estado.id)
     gasto1 = Gasto(proyecto_id=proyecto.id, concepto="G1", monto=100.0, fecha=date.today())
     gasto2 = Gasto(proyecto_id=proyecto.id, concepto="G2", monto=50.0, fecha=date.today())
 

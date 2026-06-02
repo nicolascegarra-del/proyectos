@@ -15,17 +15,18 @@ from app.core.security import create_access_token, hash_password
 from app.database import get_session
 from app.main import app
 from app.models import (
+    Cliente,
     Configuracion,
+    KanbanEstado,
     Plan,
+    Presupuesto,
+    PresupuestoLinea,
     Proyecto,
     RolWorkspace,
     Tarea,
     User,
     Workspace,
     WorkspaceMember,
-    Presupuesto,
-    PresupuestoLinea,
-    Cliente,
 )
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -142,3 +143,15 @@ async def proyecto(session: AsyncSession, workspace: Workspace, cliente: Cliente
     await session.commit()
     await session.refresh(p)
     return p
+
+
+@pytest_asyncio.fixture
+async def kanban_estado(session: AsyncSession, proyecto: Proyecto) -> KanbanEstado:
+    """Estado Kanban por defecto requerido por Tarea.estado_kanban (NOT NULL)."""
+    ke = KanbanEstado(
+        proyecto_id=proyecto.id, nombre="Todo", color="#6B7280", orden=1, es_final=False,
+    )
+    session.add(ke)
+    await session.commit()
+    await session.refresh(ke)
+    return ke
