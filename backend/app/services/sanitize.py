@@ -25,7 +25,7 @@ ALLOWED_ATTRIBUTES = {
 # alfanuméricos / px / comillas / espacios / comas. Cualquier otra propiedad se
 # descarta.
 _CSS_RULE_RE = re.compile(
-    r"^\s*(font-family|font-size)\s*:\s*([A-Za-z0-9 ,'\"\-\.\px]+)\s*$",
+    r"^\s*(font-family|font-size)\s*:\s*([A-Za-z0-9 ,'\"\-\.]+)\s*$",
     re.IGNORECASE,
 )
 
