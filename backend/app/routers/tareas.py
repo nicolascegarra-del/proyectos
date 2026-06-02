@@ -20,6 +20,7 @@ from app.models import (
     EstadoPago,
     KanbanEstado,
     Proyecto,
+    ProyectoMiembro,
     RetainerCiclo,
     RolWorkspace,
     Subtarea,
@@ -45,6 +46,29 @@ async def _get_proyecto_or_404(workspace_id: uuid.UUID, proyecto_id: uuid.UUID, 
     if not proyecto:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proyecto no encontrado")
     return proyecto
+
+
+async def _assert_member_of_proyecto(proyecto_id: uuid.UUID, user_id: uuid.UUID, session: AsyncSession) -> None:
+    result = await session.exec(
+        select(ProyectoMiembro).where(
+            ProyectoMiembro.proyecto_id == proyecto_id,
+            ProyectoMiembro.user_id == user_id,
+        )
+    )
+    if not result.first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El usuario asignado no es miembro del proyecto",
+        )
+
+
+async def _get_assigned_users(tarea_ids_with_user: list[tuple[uuid.UUID, uuid.UUID]], session: AsyncSession) -> dict[uuid.UUID, User]:
+    """Returns {user_id: User} for the unique user_ids in the input list."""
+    user_ids = {uid for _, uid in tarea_ids_with_user if uid is not None}
+    if not user_ids:
+        return {}
+    rows = await session.exec(select(User).where(User.id.in_(user_ids)))
+    return {u.id: u for u in rows.all()}
 
 
 async def _get_subtarea_counts(tarea_ids: list[uuid.UUID], session: AsyncSession) -> dict[uuid.UUID, tuple[int, int]]:
@@ -94,6 +118,12 @@ async def _check_alerts(proyecto: Proyecto, session: AsyncSession) -> tuple[bool
     return alerta_horas, alerta_retainer
 
 
+def _apply_assigned_user(out: TareaOut, user: User | None) -> None:
+    if user:
+        out.assigned_to_nombre = user.nombre
+        out.assigned_to_avatar_url = user.avatar_url
+
+
 @router.get("", response_model=list[TareaOut])
 async def list_tareas(
     workspace_id: uuid.UUID,
@@ -109,12 +139,15 @@ async def list_tareas(
     )
     tareas = result.all()
     counts = await _get_subtarea_counts([t.id for t in tareas], session)
+    users_map = await _get_assigned_users([(t.id, t.assigned_to) for t in tareas], session)
     outs = []
     for t in tareas:
         out = TareaOut.model_validate(t)
         total, hechas = counts.get(t.id, (0, 0))
         out.subtareas_total = total
         out.subtareas_completadas = hechas
+        if t.assigned_to:
+            _apply_assigned_user(out, users_map.get(t.assigned_to))
         outs.append(out)
     return outs
 
@@ -142,6 +175,9 @@ async def create_tarea(
         )
         if not tag_result.first():
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tag no encontrado en este workspace")
+
+    if data.assigned_to:
+        await _assert_member_of_proyecto(proyecto_id, data.assigned_to, session)
 
     # Resolver estado_kanban: si no se provee, usar el primer estado del proyecto
     estado_kanban_id = data.estado_kanban
@@ -189,6 +225,9 @@ async def create_tarea(
     total, hechas = counts.get(tarea.id, (0, 0))
     out.subtareas_total = total
     out.subtareas_completadas = hechas
+    if tarea.assigned_to:
+        user_map = await _get_assigned_users([(tarea.id, tarea.assigned_to)], session)
+        _apply_assigned_user(out, user_map.get(tarea.assigned_to))
     return out
 
 
@@ -212,6 +251,9 @@ async def get_tarea(
     total, hechas = counts.get(tarea.id, (0, 0))
     out.subtareas_total = total
     out.subtareas_completadas = hechas
+    if tarea.assigned_to:
+        user_map = await _get_assigned_users([(tarea.id, tarea.assigned_to)], session)
+        _apply_assigned_user(out, user_map.get(tarea.assigned_to))
     return out
 
 
@@ -248,15 +290,20 @@ async def update_tarea(
         if not tag_result.first():
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tag no encontrado en este workspace")
 
+    if data.assigned_to is not None:
+        await _assert_member_of_proyecto(proyecto_id, data.assigned_to, session)
+
     prev_estado_pago = tarea.estado_pago
     # Handle nullable fields that can be explicitly cleared to None
     if 'sprint_id' in data.model_fields_set:
         tarea.sprint_id = data.sprint_id
+    if 'assigned_to' in data.model_fields_set:
+        tarea.assigned_to = data.assigned_to
     payload = data.model_dump(exclude_none=True)
     if "descripcion_larga" in payload:
         payload["descripcion_larga"] = sanitize_html(payload["descripcion_larga"])
     for field, value in payload.items():
-        if field == 'sprint_id':
+        if field in ('sprint_id', 'assigned_to'):
             continue  # already handled above
         setattr(tarea, field, value)
     tarea.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -289,6 +336,9 @@ async def update_tarea(
     total, hechas = counts.get(tarea.id, (0, 0))
     out.subtareas_total = total
     out.subtareas_completadas = hechas
+    if tarea.assigned_to:
+        user_map = await _get_assigned_users([(tarea.id, tarea.assigned_to)], session)
+        _apply_assigned_user(out, user_map.get(tarea.assigned_to))
     return out
 
 

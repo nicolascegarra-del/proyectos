@@ -1,3 +1,4 @@
+import re
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -8,6 +9,7 @@ from app.core.dependencies import get_current_user, get_workspace_member
 from app.database import get_session
 from app.models import NotaProyecto, Proyecto, RolWorkspace, User
 from app.schemas import NotaCreate, NotaOut
+from app.services.sanitize import sanitize_html
 
 router = APIRouter(
     prefix="/workspaces/{workspace_id}/proyectos/{proyecto_id}/notas",
@@ -72,10 +74,15 @@ async def create_nota(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin permiso")
     await _get_proyecto_or_404(workspace_id, proyecto_id, session)
 
+    texto_limpio = sanitize_html(data.texto)
+    plano = re.sub(r"<[^>]+>", "", texto_limpio or "").strip()
+    if not texto_limpio or not plano:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La nota no puede estar vacía")
     nota = NotaProyecto(
         proyecto_id=proyecto_id,
         user_id=current_user.id,
-        texto=data.texto.strip(),
+        texto=texto_limpio,
+        tipo=data.tipo,
     )
     session.add(nota)
     await session.commit()

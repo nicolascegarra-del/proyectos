@@ -1,7 +1,9 @@
 export type RolWorkspace = 'owner' | 'admin' | 'member' | 'viewer'
 export type EstadoPago = 'pendiente' | 'facturado' | 'cobrado'
 export type EstadoPresupuesto = 'borrador' | 'enviado' | 'aceptado' | 'rechazado'
+export type EstadoProyecto = 'activo' | 'pausado' | 'completado' | 'archivado'
 export type Prioridad = 'critico' | 'alto' | 'medio' | 'bajo'
+export type TipoNota = 'general' | 'reunion' | 'decision' | 'bloqueante' | 'acuerdo'
 
 export interface KanbanEstado {
   id: string
@@ -100,6 +102,10 @@ export interface Proyecto {
   retainer_horas: number | null
   public_uuid: string | null
   sprint_duracion_dias: number | null
+  estado: EstadoProyecto
+  descripcion: string | null
+  fecha_inicio: string | null
+  fecha_fin_estimada: string | null
   created_at: string
   updated_at: string
 }
@@ -141,6 +147,9 @@ export interface Tarea {
   fecha_inicio: string | null
   fecha_fin: string | null
   sprint_id: string | null
+  assigned_to: string | null
+  assigned_to_nombre: string | null
+  assigned_to_avatar_url: string | null
   created_at: string
   updated_at: string
   alerta_horas?: boolean
@@ -173,6 +182,7 @@ export interface NotaProyecto {
   proyecto_id: string
   user_id: string
   texto: string
+  tipo: TipoNota
   created_at: string
   autor_nombre: string | null
   autor_email: string | null
@@ -192,9 +202,12 @@ export interface ProyectoMiembro {
 export interface Comentario {
   id: string
   tarea_id: string
+  user_id: string | null
   texto: string
   created_at: string
   updated_at: string
+  autor_nombre: string | null
+  autor_avatar_url: string | null
 }
 
 export interface RegistroTiempo {

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from '@tanstack/react-router'
 import { useWorkspaceStore } from '@/store/workspaceStore'
 import { api, getErrorMessage } from '@/lib/api'
-import type { Gasto, KanbanEstado, Proyecto, RetainerCiclo, Sprint, Tag, Tarea } from '@/types'
+import type { EstadoProyecto, Gasto, KanbanEstado, Proyecto, RetainerCiclo, Sprint, Tag, Tarea } from '@/types'
+import { ESTADO_PROYECTO_CONFIG, ESTADO_PROYECTO_ORDEN } from './ProyectosPage'
 import { KanbanBoard } from '@/components/kanban/KanbanBoard'
 import { GanttView } from '@/components/gantt/GanttView'
 import { Stopwatch } from '@/components/stopwatch/Stopwatch'
@@ -169,6 +170,9 @@ export default function ProyectoDetailPage() {
         fecha_inicio: null,
         fecha_fin: null,
         sprint_id: null,
+        assigned_to: null,
+        assigned_to_nombre: null,
+        assigned_to_avatar_url: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }
@@ -469,6 +473,25 @@ export default function ProyectoDetailPage() {
     toast({ title: 'Link público copiado' })
   }
 
+  const canEditEstado = currentRol === 'owner' || currentRol === 'admin'
+
+  const handleEstadoChange = async (nuevo: EstadoProyecto) => {
+    if (!currentWorkspace || !proyecto || nuevo === proyecto.estado) return
+    const prev = proyecto
+    setProyecto({ ...proyecto, estado: nuevo })
+    try {
+      const { data } = await api.put<Proyecto>(
+        `/workspaces/${currentWorkspace.id}/proyectos/${proyecto.id}`,
+        { estado: nuevo },
+      )
+      setProyecto(data)
+      toast({ title: `Estado: ${ESTADO_PROYECTO_CONFIG[nuevo].label}` })
+    } catch (err) {
+      setProyecto(prev)
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    }
+  }
+
   if (loading || !proyecto) {
     return (
       <div className="space-y-4 max-w-6xl">
@@ -494,7 +517,58 @@ export default function ProyectoDetailPage() {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="min-w-0 flex-1">
-          <h1 className="text-xl font-semibold truncate">{proyecto.nombre}</h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-xl font-semibold truncate">{proyecto.nombre}</h1>
+            {(() => {
+              const estado = proyecto.estado ?? 'activo'
+              const cfg = ESTADO_PROYECTO_CONFIG[estado]
+              if (canEditEstado) {
+                return (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium cursor-pointer transition-opacity hover:opacity-80 ${cfg.color}`}
+                        title="Cambiar estado"
+                      >
+                        {cfg.label}
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      {ESTADO_PROYECTO_ORDEN.map(s => (
+                        <DropdownMenuItem
+                          key={s}
+                          onClick={() => handleEstadoChange(s)}
+                          className={s === estado ? 'bg-muted' : ''}
+                        >
+                          <span className={`inline-block h-2 w-2 rounded-full mr-2 ${ESTADO_PROYECTO_CONFIG[s].color.split(' ')[0]}`} />
+                          {ESTADO_PROYECTO_CONFIG[s].label}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )
+              }
+              return (
+                <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${cfg.color}`}>
+                  {cfg.label}
+                </span>
+              )
+            })()}
+          </div>
+          {(proyecto.descripcion || proyecto.fecha_inicio || proyecto.fecha_fin_estimada) && (
+            <div className="mt-1 space-y-0.5">
+              {proyecto.descripcion && (
+                <p className="text-xs text-muted-foreground">{proyecto.descripcion}</p>
+              )}
+              {(proyecto.fecha_inicio || proyecto.fecha_fin_estimada) && (
+                <p className="text-[11px] text-muted-foreground">
+                  {proyecto.fecha_inicio && <>Inicio: {proyecto.fecha_inicio}</>}
+                  {proyecto.fecha_inicio && proyecto.fecha_fin_estimada && <span className="mx-1.5">·</span>}
+                  {proyecto.fecha_fin_estimada && <>Fin estimado: {proyecto.fecha_fin_estimada}</>}
+                </p>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {proyecto.public_uuid && (

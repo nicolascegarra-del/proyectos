@@ -10,9 +10,11 @@ from pydantic import BaseModel, EmailStr, Field, field_validator, model_validato
 from app.models import (
     EstadoPago,
     EstadoPresupuesto,
+    EstadoProyecto,
     PeriodicidadGasto,
     Prioridad,
     RolWorkspace,
+    TipoNota,
     TipoPagoGasto,
 )
 
@@ -305,6 +307,10 @@ class ProyectoCreate(BaseModel):
     alerta_horas_max: Optional[float] = None
     stopwatch_enabled: bool = False
     retainer_horas: Optional[float] = None
+    estado: EstadoProyecto = EstadoProyecto.activo
+    descripcion: Optional[str] = Field(default=None, max_length=1000)
+    fecha_inicio: Optional[date] = None
+    fecha_fin_estimada: Optional[date] = None
 
 
 class ProyectoUpdate(BaseModel):
@@ -316,6 +322,10 @@ class ProyectoUpdate(BaseModel):
     retainer_horas: Optional[float] = None
     is_public: Optional[bool] = None
     sprint_duracion_dias: Optional[int] = None
+    estado: Optional[EstadoProyecto] = None
+    descripcion: Optional[str] = Field(default=None, max_length=1000)
+    fecha_inicio: Optional[date] = None
+    fecha_fin_estimada: Optional[date] = None
 
 
 class ProyectoOut(BaseModel):
@@ -330,6 +340,10 @@ class ProyectoOut(BaseModel):
     public_uuid: Optional[uuid.UUID] = None
     is_public: bool
     sprint_duracion_dias: Optional[int] = None
+    estado: EstadoProyecto = EstadoProyecto.activo
+    descripcion: Optional[str] = None
+    fecha_inicio: Optional[date] = None
+    fecha_fin_estimada: Optional[date] = None
     created_at: datetime
     updated_at: datetime
     model_config = {"from_attributes": True}
@@ -478,6 +492,7 @@ class TareaCreate(BaseModel):
     complejidad: Optional[int] = Field(default=None, ge=1, le=9)
     fecha_inicio: Optional[date] = None
     fecha_fin: Optional[date] = None
+    assigned_to: Optional[uuid.UUID] = None
     subtareas: list[_SubtareaInline] = Field(default_factory=list)
 
     @field_validator("github_url")
@@ -503,6 +518,7 @@ class TareaUpdate(BaseModel):
     fecha_inicio: Optional[date] = None
     fecha_fin: Optional[date] = None
     sprint_id: Optional[uuid.UUID] = None
+    assigned_to: Optional[uuid.UUID] = None
 
     @field_validator("github_url")
     @classmethod
@@ -529,6 +545,9 @@ class TareaOut(BaseModel):
     fecha_inicio: Optional[date]
     fecha_fin: Optional[date]
     sprint_id: Optional[uuid.UUID] = None
+    assigned_to: Optional[uuid.UUID] = None
+    assigned_to_nombre: Optional[str] = None
+    assigned_to_avatar_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     alerta_horas: bool = False
@@ -593,9 +612,12 @@ class ComentarioUpdate(BaseModel):
 class ComentarioOut(BaseModel):
     id: uuid.UUID
     tarea_id: uuid.UUID
+    user_id: Optional[uuid.UUID] = None
     texto: str
     created_at: datetime
     updated_at: datetime
+    autor_nombre: Optional[str] = None
+    autor_avatar_url: Optional[str] = None
     model_config = {"from_attributes": True}
 
 
@@ -835,7 +857,8 @@ class ResetPasswordOut(BaseModel):
 # ── NotaProyecto ──────────────────────────────────────────────────────────────
 
 class NotaCreate(BaseModel):
-    texto: str = Field(min_length=1, max_length=4000)
+    texto: str = Field(min_length=1)
+    tipo: TipoNota = TipoNota.general
 
 
 class NotaOut(BaseModel):
@@ -843,6 +866,7 @@ class NotaOut(BaseModel):
     proyecto_id: uuid.UUID
     user_id: uuid.UUID
     texto: str
+    tipo: TipoNota
     created_at: datetime
     autor_nombre: Optional[str] = None
     autor_email: Optional[str] = None

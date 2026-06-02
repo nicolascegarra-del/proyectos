@@ -120,13 +120,26 @@ export function KanbanCard({ tarea, tag, onClick, onMarkDone, isFinalEstado = fa
           {tarea.github_url && <Github className="h-3 w-3" title="GitHub" />}
           {tarea.archivo_url && <Paperclip className="h-3 w-3" title="Archivo adjunto" />}
         </div>
-        {tag && (
-          <span
-            className="inline-block w-2 h-2 rounded-full flex-shrink-0"
-            style={{ backgroundColor: tag.color }}
-            title={tag.nombre}
-          />
-        )}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {tarea.assigned_to && (
+            <div className="flex items-center gap-1" title={tarea.assigned_to_nombre ?? ''}>
+              {tarea.assigned_to_avatar_url ? (
+                <img src={tarea.assigned_to_avatar_url} className="h-5 w-5 rounded-full" alt="" />
+              ) : (
+                <span className="h-5 w-5 rounded-full bg-klyp-pale text-klyp-navy text-[9px] font-semibold flex items-center justify-center flex-shrink-0">
+                  {(tarea.assigned_to_nombre ?? '?').charAt(0).toUpperCase()}
+                </span>
+              )}
+            </div>
+          )}
+          {tag && (
+            <span
+              className="inline-block w-2 h-2 rounded-full flex-shrink-0"
+              style={{ backgroundColor: tag.color }}
+              title={tag.nombre}
+            />
+          )}
+        </div>
       </div>
 
       <p className="text-[10px] text-muted-foreground">{tarea.fecha}</p>

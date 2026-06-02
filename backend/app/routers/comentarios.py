@@ -38,6 +38,14 @@ async def _get_tarea_or_404(
     return tarea
 
 
+def _to_out(comentario: Comentario, autor: User | None) -> ComentarioOut:
+    out = ComentarioOut.model_validate(comentario)
+    if autor:
+        out.autor_nombre = autor.nombre
+        out.autor_avatar_url = autor.avatar_url
+    return out
+
+
 @router.get("", response_model=list[ComentarioOut])
 async def list_comentarios(
     workspace_id: uuid.UUID,
@@ -49,9 +57,12 @@ async def list_comentarios(
 ):
     await _get_tarea_or_404(workspace_id, proyecto_id, tarea_id, session)
     result = await session.exec(
-        select(Comentario).where(Comentario.tarea_id == tarea_id).order_by(Comentario.created_at)
+        select(Comentario, User)
+        .outerjoin(User, User.id == Comentario.user_id)
+        .where(Comentario.tarea_id == tarea_id)
+        .order_by(Comentario.created_at)
     )
-    return result.all()
+    return [_to_out(c, u) for c, u in result.all()]
 
 
 @router.post("", response_model=ComentarioOut, status_code=status.HTTP_201_CREATED)
@@ -68,11 +79,17 @@ async def create_comentario(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin permiso")
     await _get_tarea_or_404(workspace_id, proyecto_id, tarea_id, session)
     now = datetime.now(timezone.utc).replace(tzinfo=None)
-    comentario = Comentario(tarea_id=tarea_id, texto=data.texto, created_at=now, updated_at=now)
+    comentario = Comentario(
+        tarea_id=tarea_id,
+        user_id=current_user.id,
+        texto=data.texto,
+        created_at=now,
+        updated_at=now,
+    )
     session.add(comentario)
     await session.commit()
     await session.refresh(comentario)
-    return comentario
+    return _to_out(comentario, current_user)
 
 
 @router.put("/{comentario_id}", response_model=ComentarioOut)
@@ -101,7 +118,11 @@ async def update_comentario(
     session.add(comentario)
     await session.commit()
     await session.refresh(comentario)
-    return comentario
+    autor: User | None = None
+    if comentario.user_id:
+        autor_result = await session.exec(select(User).where(User.id == comentario.user_id))
+        autor = autor_result.first()
+    return _to_out(comentario, autor)
 
 
 @router.delete("/{comentario_id}", status_code=status.HTTP_204_NO_CONTENT)

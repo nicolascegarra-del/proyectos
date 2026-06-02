@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from 'react'
 import { format } from 'date-fns'
 import { api, getErrorMessage } from '@/lib/api'
-import type { Comentario, EstadoPago, Prioridad, Proyecto, Sprint, Subtarea, Tag, Tarea } from '@/types'
+import type { Comentario, EstadoPago, Prioridad, Proyecto, ProyectoMiembro, Sprint, Subtarea, Tag, Tarea } from '@/types'
 import { today } from '@/lib/utils'
 import { TaskTimer } from '@/components/tareas/TaskTimer'
 import { Button } from '@/components/ui/button'
@@ -47,6 +47,7 @@ type FormState = {
   fecha_inicio: string
   fecha_fin: string
   sprint_id: string
+  assigned_to: string
 }
 
 const emptyForm = (): FormState => ({
@@ -61,6 +62,7 @@ const emptyForm = (): FormState => ({
   fecha_inicio: '',
   fecha_fin: '',
   sprint_id: '',
+  assigned_to: '',
 })
 
 export function TareaModal({
@@ -114,6 +116,9 @@ export function TareaModal({
   const [savingComentario, setSavingComentario] = useState(false)
   const [loadingComentarios, setLoadingComentarios] = useState(false)
 
+  // Miembros del proyecto (para asignar tarea)
+  const [miembros, setMiembros] = useState<ProyectoMiembro[]>([])
+
   const efectiveProyectoId = proyectoId || selectedProyectoId
 
   useEffect(() => {
@@ -132,6 +137,7 @@ export function TareaModal({
           fecha_inicio: tarea.fecha_inicio ?? '',
           fecha_fin: tarea.fecha_fin ?? '',
           sprint_id: tarea.sprint_id ?? '',
+          assigned_to: tarea.assigned_to ?? '',
         })
         setArchivoUrl(tarea.archivo_url)
         setShowExtras(!!(tarea.github_url || tarea.archivo_url))
@@ -151,6 +157,24 @@ export function TareaModal({
       setNewComentario('')
     }
   }, [open, tarea])
+
+  useEffect(() => {
+    if (!open || !efectiveProyectoId) {
+      setMiembros([])
+      return
+    }
+    const loadMiembros = async () => {
+      try {
+        const { data } = await api.get<ProyectoMiembro[]>(
+          `/workspaces/${workspaceId}/proyectos/${efectiveProyectoId}/miembros`,
+        )
+        setMiembros(data)
+      } catch {
+        setMiembros([])
+      }
+    }
+    loadMiembros()
+  }, [open, workspaceId, efectiveProyectoId])
 
   const loadSubtareas = async (tareaId: string, pId: string) => {
     setLoadingSubtareas(true)
@@ -231,6 +255,7 @@ export function TareaModal({
         estado_pago: form.estado_pago,
         fecha_inicio: form.fecha_inicio || null,
         fecha_fin: form.fecha_fin || null,
+        assigned_to: form.assigned_to || null,
       }
 
       // Sprint only on edit (assign from sprint tab handles new task case)
@@ -668,6 +693,36 @@ export function TareaModal({
               </div>
             </div>
 
+            {/* Asignado a */}
+            <div className="space-y-1.5">
+              <Label>Asignado a</Label>
+              <Select value={form.assigned_to} onValueChange={(v) => set('assigned_to', v === 'none' ? '' : v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Sin asignar" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sin asignar</SelectItem>
+                  {miembros.map((m) => (
+                    <SelectItem key={m.user_id} value={m.user_id}>
+                      <span className="flex items-center gap-2">
+                        {m.user?.avatar_url ? (
+                          <img src={m.user.avatar_url} className="h-4 w-4 rounded-full" alt="" />
+                        ) : (
+                          <span className="h-4 w-4 rounded-full bg-klyp-pale text-klyp-navy text-[9px] font-semibold flex items-center justify-center flex-shrink-0">
+                            {(m.user?.nombre ?? '?').charAt(0).toUpperCase()}
+                          </span>
+                        )}
+                        {m.user?.nombre ?? m.user_id}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {miembros.length === 0 && efectiveProyectoId && (
+                <p className="text-[10px] text-muted-foreground">Añade miembros al proyecto desde la pestaña Equipo</p>
+              )}
+            </div>
+
             {/* Tag */}
             <div className="space-y-1.5">
               <Label>Etiqueta</Label>
@@ -818,11 +873,20 @@ export function TareaModal({
                   ) : (
                     comentarios.map((c) => (
                       <div key={c.id} className="flex items-start gap-2 group/com">
+                        {c.autor_avatar_url ? (
+                          <img src={c.autor_avatar_url} alt="" className="h-6 w-6 rounded-full flex-shrink-0 mt-1" />
+                        ) : (
+                          <span className="h-6 w-6 rounded-full bg-klyp-pale text-klyp-navy text-[10px] font-semibold flex items-center justify-center flex-shrink-0 mt-1">
+                            {(c.autor_nombre ?? '?').charAt(0).toUpperCase()}
+                          </span>
+                        )}
                         <div className="flex-1 min-w-0 bg-muted/30 rounded-md px-3 py-2">
+                          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mb-1">
+                            <span className="font-medium text-foreground">{c.autor_nombre ?? 'Desconocido'}</span>
+                            <span>·</span>
+                            <span>{format(new Date(c.created_at), 'dd/MM/yyyy HH:mm')}</span>
+                          </div>
                           <p className="text-sm whitespace-pre-wrap break-words">{c.texto}</p>
-                          <p className="text-[10px] text-muted-foreground mt-1">
-                            {format(new Date(c.created_at), 'dd/MM/yyyy HH:mm')}
-                          </p>
                         </div>
                         <button
                           type="button"

@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useWorkspaceStore } from '@/store/workspaceStore'
 import { api, getErrorMessage, isLimitError } from '@/lib/api'
-import type { Cliente, Proyecto } from '@/types'
+import type { Cliente, EstadoProyecto, Proyecto } from '@/types'
 import { formatEUR } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { DatePicker } from '@/components/ui/date-picker'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
   DialogContent,
@@ -21,6 +23,15 @@ import { Plus, FolderKanban, ExternalLink, Loader2, Pencil, Trash2 } from 'lucid
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from '@/components/ui/use-toast'
 
+export const ESTADO_PROYECTO_CONFIG: Record<EstadoProyecto, { label: string; color: string }> = {
+  activo:     { label: 'Activo',     color: 'bg-green-500/20 text-green-400' },
+  pausado:    { label: 'Pausado',    color: 'bg-yellow-500/20 text-yellow-400' },
+  completado: { label: 'Completado', color: 'bg-blue-500/20 text-blue-400' },
+  archivado:  { label: 'Archivado',  color: 'bg-muted text-muted-foreground' },
+}
+
+export const ESTADO_PROYECTO_ORDEN: EstadoProyecto[] = ['activo', 'pausado', 'completado', 'archivado']
+
 type FormState = {
   nombre: string
   cliente_id: string
@@ -28,6 +39,10 @@ type FormState = {
   alerta_horas_max: string
   stopwatch_enabled: boolean
   retainer_horas: string
+  estado: EstadoProyecto
+  descripcion: string
+  fecha_inicio: string
+  fecha_fin_estimada: string
 }
 
 const emptyForm = (): FormState => ({
@@ -37,6 +52,10 @@ const emptyForm = (): FormState => ({
   alerta_horas_max: '',
   stopwatch_enabled: false,
   retainer_horas: '',
+  estado: 'activo',
+  descripcion: '',
+  fecha_inicio: '',
+  fecha_fin_estimada: '',
 })
 
 export default function ProyectosPage() {
@@ -54,6 +73,7 @@ export default function ProyectosPage() {
   const [savingClient, setSavingClient] = useState(false)
 
   const [form, setForm] = useState<FormState>(emptyForm())
+  const [filtroEstado, setFiltroEstado] = useState<EstadoProyecto | 'todos'>('todos')
 
   const navigate = useNavigate()
 
@@ -92,6 +112,10 @@ export default function ProyectosPage() {
       alerta_horas_max: p.alerta_horas_max?.toString() ?? '',
       stopwatch_enabled: p.stopwatch_enabled,
       retainer_horas: p.retainer_horas?.toString() ?? '',
+      estado: p.estado ?? 'activo',
+      descripcion: p.descripcion ?? '',
+      fecha_inicio: p.fecha_inicio ?? '',
+      fecha_fin_estimada: p.fecha_fin_estimada ?? '',
     })
     setModalOpen(true)
   }
@@ -107,6 +131,10 @@ export default function ProyectosPage() {
         alerta_horas_max: form.alerta_horas_max ? parseFloat(form.alerta_horas_max) : null,
         stopwatch_enabled: form.stopwatch_enabled,
         retainer_horas: form.retainer_horas ? parseFloat(form.retainer_horas) : null,
+        estado: form.estado,
+        descripcion: form.descripcion || null,
+        fecha_inicio: form.fecha_inicio || null,
+        fecha_fin_estimada: form.fecha_fin_estimada || null,
       }
 
       if (editTarget) {
@@ -175,6 +203,11 @@ export default function ProyectosPage() {
   const clienteNombre = (id: string) =>
     clientes.find((c) => c.id === id)?.nombre ?? '—'
 
+  const proyectosFiltrados = useMemo(
+    () => filtroEstado === 'todos' ? proyectos : proyectos.filter(p => (p.estado ?? 'activo') === filtroEstado),
+    [proyectos, filtroEstado],
+  )
+
   if (loading) {
     return (
       <div className="space-y-4 max-w-4xl">
@@ -197,12 +230,27 @@ export default function ProyectosPage() {
 
   return (
     <div className="space-y-4 max-w-4xl">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <h1 className="text-xl font-semibold">Proyectos</h1>
-        <Button size="sm" onClick={openCreate} className="h-10">
-          <Plus className="mr-1.5 h-4 w-4" />
-          Nuevo
-        </Button>
+        <div className="flex items-center gap-2">
+          {proyectos.length > 0 && (
+            <Select value={filtroEstado} onValueChange={(v) => setFiltroEstado(v as EstadoProyecto | 'todos')}>
+              <SelectTrigger className="h-9 w-40 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos los estados</SelectItem>
+                {ESTADO_PROYECTO_ORDEN.map(s => (
+                  <SelectItem key={s} value={s}>{ESTADO_PROYECTO_CONFIG[s].label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Button size="sm" onClick={openCreate} className="h-10">
+            <Plus className="mr-1.5 h-4 w-4" />
+            Nuevo
+          </Button>
+        </div>
       </div>
 
       {proyectos.length === 0 ? (
@@ -214,50 +262,63 @@ export default function ProyectosPage() {
             Nuevo proyecto
           </Button>
         </div>
+      ) : proyectosFiltrados.length === 0 ? (
+        <p className="text-sm text-muted-foreground italic">No hay proyectos con este estado.</p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          {proyectos.map((p) => (
-            <div
-              key={p.id}
-              className="bg-card border border-border rounded-lg p-4 space-y-3 hover:border-primary/30 transition-colors cursor-pointer"
-              onClick={() => navigate({ to: '/proyectos/$proyectoId', params: { proyectoId: p.id } })}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium truncate">{p.nombre}</p>
-                  <p className="text-xs text-muted-foreground">{clienteNombre(p.cliente_id)}</p>
+          {proyectosFiltrados.map((p) => {
+            const estadoCfg = ESTADO_PROYECTO_CONFIG[p.estado ?? 'activo']
+            return (
+              <div
+                key={p.id}
+                className="bg-card border border-border rounded-lg p-4 space-y-3 hover:border-primary/30 transition-colors cursor-pointer"
+                onClick={() => navigate({ to: '/proyectos/$proyectoId', params: { proyectoId: p.id } })}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-medium truncate">{p.nombre}</p>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${estadoCfg.color}`}>
+                        {estadoCfg.label}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{clienteNombre(p.cliente_id)}</p>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                      onClick={(e) => openEdit(p, e)}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      onClick={(e) => { e.stopPropagation(); setDeleteTarget(p) }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                    <ExternalLink className="h-4 w-4 text-muted-foreground mt-0.5" />
+                  </div>
                 </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                    onClick={(e) => openEdit(p, e)}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(p) }}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                  <ExternalLink className="h-4 w-4 text-muted-foreground mt-0.5" />
+                {p.descripcion && (
+                  <p className="text-xs text-muted-foreground line-clamp-2">{p.descripcion}</p>
+                )}
+                <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                  <span>{formatEUR(p.tarifa_hora)}/h</span>
+                  {p.stopwatch_enabled && (
+                    <span className="bg-primary/10 text-primary px-1.5 py-0.5 rounded">Cronómetro</span>
+                  )}
+                  {p.retainer_horas && (
+                    <span className="bg-muted px-1.5 py-0.5 rounded">Retainer {p.retainer_horas}h</span>
+                  )}
                 </div>
               </div>
-              <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                <span>{formatEUR(p.tarifa_hora)}/h</span>
-                {p.stopwatch_enabled && (
-                  <span className="bg-primary/10 text-primary px-1.5 py-0.5 rounded">Cronómetro</span>
-                )}
-                {p.retainer_horas && (
-                  <span className="bg-muted px-1.5 py-0.5 rounded">Retainer {p.retainer_horas}h</span>
-                )}
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
@@ -305,6 +366,39 @@ export default function ProyectosPage() {
             <div className="space-y-1.5">
               <Label>Horas retainer (bolsa)</Label>
               <Input type="number" min="0" placeholder="Opcional" value={form.retainer_horas} onChange={(e) => setForm((f) => ({ ...f, retainer_horas: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Estado</Label>
+              <Select value={form.estado} onValueChange={(v) => setForm((f) => ({ ...f, estado: v as EstadoProyecto }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ESTADO_PROYECTO_ORDEN.map(s => (
+                    <SelectItem key={s} value={s}>{ESTADO_PROYECTO_CONFIG[s].label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Descripción <span className="text-muted-foreground text-xs">(opcional, máx. 1000)</span></Label>
+              <Textarea
+                rows={3}
+                maxLength={1000}
+                value={form.descripcion}
+                onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))}
+                placeholder="Contexto, objetivo, alcance del proyecto..."
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Fecha inicio</Label>
+                <DatePicker value={form.fecha_inicio} onChange={(v) => setForm((f) => ({ ...f, fecha_inicio: v }))} placeholder="Sin fecha" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Fin estimada</Label>
+                <DatePicker value={form.fecha_fin_estimada} onChange={(v) => setForm((f) => ({ ...f, fecha_fin_estimada: v }))} placeholder="Sin fecha" />
+              </div>
             </div>
             <div className="flex items-center justify-between">
               <Label>Cronómetro</Label>

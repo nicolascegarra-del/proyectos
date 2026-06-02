@@ -4,7 +4,7 @@ from datetime import datetime, date, timezone
 from typing import Optional
 from enum import Enum
 from sqlmodel import SQLModel, Field
-from sqlalchemy import Index
+from sqlalchemy import Column, Index, Text
 
 
 class Plan(SQLModel, table=True):
@@ -131,6 +131,13 @@ class Cliente(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
+class EstadoProyecto(str, Enum):
+    activo = "activo"
+    pausado = "pausado"
+    completado = "completado"
+    archivado = "archivado"
+
+
 class Proyecto(SQLModel, table=True):
     __tablename__ = "proyecto"
 
@@ -145,6 +152,10 @@ class Proyecto(SQLModel, table=True):
     public_uuid: uuid.UUID = Field(default_factory=uuid.uuid4, unique=True, index=True)
     is_public: bool = False
     sprint_duracion_dias: Optional[int] = None
+    estado: EstadoProyecto = Field(default=EstadoProyecto.activo, index=True)
+    descripcion: Optional[str] = Field(default=None, max_length=1000)
+    fecha_inicio: Optional[date] = None
+    fecha_fin_estimada: Optional[date] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
@@ -234,6 +245,7 @@ class Tarea(SQLModel, table=True):
     fecha_inicio: Optional[date] = None
     fecha_fin: Optional[date] = None
     sprint_id: Optional[uuid.UUID] = Field(default=None, foreign_key="sprint.id", index=True)
+    assigned_to: Optional[uuid.UUID] = Field(default=None, foreign_key="user.id", index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
@@ -331,6 +343,14 @@ class Subtarea(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
+class TipoNota(str, Enum):
+    general = "general"
+    reunion = "reunion"
+    decision = "decision"
+    bloqueante = "bloqueante"
+    acuerdo = "acuerdo"
+
+
 class NotaProyecto(SQLModel, table=True):
     __tablename__ = "nota_proyecto"
     __table_args__ = (
@@ -340,7 +360,8 @@ class NotaProyecto(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     proyecto_id: uuid.UUID = Field(foreign_key="proyecto.id", index=True)
     user_id: uuid.UUID = Field(foreign_key="user.id", index=True)
-    texto: str = Field(max_length=4000)
+    texto: str = Field(sa_column=Column(Text, nullable=False))
+    tipo: TipoNota = Field(default=TipoNota.general)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
@@ -363,6 +384,7 @@ class Comentario(SQLModel, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     tarea_id: uuid.UUID = Field(foreign_key="tarea.id", index=True)
+    user_id: Optional[uuid.UUID] = Field(default=None, foreign_key="user.id", index=True)
     texto: str = Field(max_length=2000)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
