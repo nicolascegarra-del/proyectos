@@ -54,6 +54,19 @@ def generate_secure_token() -> str:
     return secrets.token_urlsafe(32)
 
 
+def generate_temp_password() -> str:
+    """Genera una contraseña temporal fuerte (mayúscula + dígito + especial + aleatorio)."""
+    import string
+
+    alphabet = string.ascii_letters + string.digits + "!@#$%"
+    return (
+        secrets.choice(string.ascii_uppercase)
+        + secrets.choice(string.digits)
+        + secrets.choice("!@#$%")
+        + "".join(secrets.choice(alphabet) for _ in range(9))
+    )
+
+
 def _get_fernet() -> Fernet:
     if not settings.FERNET_KEY:
         raise HTTPException(

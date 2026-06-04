@@ -8,19 +8,35 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from app.core.dependencies import get_current_superadmin
-from app.core.security import hash_password
+from app.core.security import generate_temp_password, hash_password
 from app.database import get_session
-from app.models import Plan, Proyecto, Tarea, User, Workspace, WorkspaceMember
+from app.models import (
+    Configuracion,
+    Plan,
+    Proyecto,
+    RolWorkspace,
+    Tarea,
+    User,
+    Workspace,
+    WorkspaceMember,
+)
 from app.schemas import (
     AssignPlanRequest,
+    AssignWorkspaceRequest,
     PlanCreate,
     PlanOut,
     PlanUpdate,
     ResetPasswordOut,
+    SuperadminCreateUser,
+    SuperadminCreateUserOut,
+    SuperadminCreateWorkspace,
     SuperadminMetrics,
     SuperadminUpdateUser,
     SuperadminUserWorkspaceOut,
     UserOut,
+    WorkspaceAdminOut,
+    WorkspaceMemberOut,
+    WorkspaceOut,
 )
 
 logger = logging.getLogger(__name__)
@@ -304,3 +320,172 @@ async def reset_user_password(
     await session.commit()
     logger.info("Password reset by superadmin for user_id=%s", user_id)
     return ResetPasswordOut(new_password=new_password)
+
+
+# ── Crear usuarios ────────────────────────────────────────────────────────────
+
+@router.post("/users", response_model=SuperadminCreateUserOut, status_code=status.HTTP_201_CREATED)
+async def create_user(
+    data: SuperadminCreateUser,
+    _=Depends(get_current_superadmin),
+    session: AsyncSession = Depends(get_session),
+):
+    existing = await session.exec(select(User).where(User.email == data.email))
+    if existing.first():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ya existe un usuario con ese email")
+
+    plan_id = data.plan_id
+    if plan_id is not None:
+        plan_result = await session.exec(select(Plan).where(Plan.id == plan_id))
+        if not plan_result.first():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan no encontrado")
+    else:
+        default_plan = await session.exec(select(Plan).where(Plan.es_default == True))
+        p = default_plan.first()
+        plan_id = p.id if p else None
+
+    temp_password = generate_temp_password()
+    user = User(
+        email=data.email,
+        nombre=data.nombre,
+        password_hash=hash_password(temp_password),
+        is_superadmin=data.is_superadmin,
+        plan_id=plan_id,
+        is_active=True,
+    )
+    session.add(user)
+    await session.commit()
+    await session.refresh(user)
+    logger.info("User created by superadmin: %s", user.email)
+    return SuperadminCreateUserOut(user=UserOut.model_validate(user), temp_password=temp_password)
+
+
+# ── Workspaces ────────────────────────────────────────────────────────────────
+
+@router.get("/workspaces", response_model=list[WorkspaceAdminOut])
+async def list_all_workspaces(
+    limit: int = Query(200, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    _=Depends(get_current_superadmin),
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.exec(select(Workspace).offset(offset).limit(limit))
+    workspaces = result.all()
+    out = []
+    for ws in workspaces:
+        owner = (await session.exec(select(User).where(User.id == ws.owner_id))).first()
+        miembros = (
+            await session.exec(
+                select(func.count(WorkspaceMember.id)).where(WorkspaceMember.workspace_id == ws.id)
+            )
+        ).one() or 0
+        proyectos = (
+            await session.exec(
+                select(func.count(Proyecto.id)).where(Proyecto.workspace_id == ws.id)
+            )
+        ).one() or 0
+        out.append(WorkspaceAdminOut(
+            id=ws.id,
+            nombre=ws.nombre,
+            owner_id=ws.owner_id,
+            owner_nombre=owner.nombre if owner else None,
+            owner_email=owner.email if owner else None,
+            miembros_count=miembros,
+            proyectos_count=proyectos,
+            created_at=ws.created_at,
+        ))
+    return out
+
+
+@router.post("/workspaces", response_model=WorkspaceOut, status_code=status.HTTP_201_CREATED)
+async def create_workspace_admin(
+    data: SuperadminCreateWorkspace,
+    _=Depends(get_current_superadmin),
+    session: AsyncSession = Depends(get_session),
+):
+    owner = (await session.exec(select(User).where(User.id == data.owner_id))).first()
+    if not owner:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario owner no encontrado")
+
+    workspace = Workspace(nombre=data.nombre, owner_id=data.owner_id)
+    session.add(workspace)
+    await session.flush()
+    session.add(WorkspaceMember(
+        workspace_id=workspace.id, user_id=data.owner_id, rol=RolWorkspace.owner,
+    ))
+    session.add(Configuracion(workspace_id=workspace.id))
+    await session.commit()
+    await session.refresh(workspace)
+    logger.info("Workspace created by superadmin: %s (owner=%s)", workspace.nombre, owner.email)
+    return workspace
+
+
+# ── Asignar workspaces a usuarios ─────────────────────────────────────────────
+
+@router.post(
+    "/users/{user_id}/workspaces",
+    response_model=WorkspaceMemberOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def assign_workspace(
+    user_id: uuid.UUID,
+    data: AssignWorkspaceRequest,
+    _=Depends(get_current_superadmin),
+    session: AsyncSession = Depends(get_session),
+):
+    user = (await session.exec(select(User).where(User.id == user_id))).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+    ws = (await session.exec(select(Workspace).where(Workspace.id == data.workspace_id))).first()
+    if not ws:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace no encontrado")
+
+    already = (
+        await session.exec(
+            select(WorkspaceMember).where(
+                WorkspaceMember.workspace_id == data.workspace_id,
+                WorkspaceMember.user_id == user_id,
+            )
+        )
+    ).first()
+    if already:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El usuario ya es miembro de este workspace")
+
+    member = WorkspaceMember(workspace_id=data.workspace_id, user_id=user_id, rol=data.rol)
+    session.add(member)
+    await session.commit()
+    await session.refresh(member)
+    return WorkspaceMemberOut(
+        id=member.id,
+        workspace_id=member.workspace_id,
+        user_id=member.user_id,
+        rol=member.rol,
+        created_at=member.created_at,
+    )
+
+
+@router.delete(
+    "/users/{user_id}/workspaces/{workspace_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def unassign_workspace(
+    user_id: uuid.UUID,
+    workspace_id: uuid.UUID,
+    _=Depends(get_current_superadmin),
+    session: AsyncSession = Depends(get_session),
+):
+    member = (
+        await session.exec(
+            select(WorkspaceMember).where(
+                WorkspaceMember.workspace_id == workspace_id,
+                WorkspaceMember.user_id == user_id,
+            )
+        )
+    ).first()
+    if not member:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El usuario no es miembro de este workspace")
+    if member.rol == RolWorkspace.owner:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No puedes quitar al owner de su propio workspace")
+
+    await session.delete(member)
+    await session.commit()

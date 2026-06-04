@@ -36,6 +36,23 @@ type UserWorkspace = {
   created_at: string
 }
 
+type AdminWorkspace = {
+  id: string
+  nombre: string
+  owner_id: string
+  owner_nombre: string | null
+  owner_email: string | null
+  miembros_count: number
+  proyectos_count: number
+  created_at: string
+}
+
+const ROLES: { value: string; label: string }[] = [
+  { value: 'admin', label: 'Admin' },
+  { value: 'member', label: 'Miembro' },
+  { value: 'viewer', label: 'Lector' },
+]
+
 export default function SuperadminPage() {
   const [planes, setPlanes] = useState<Plan[]>([])
   const [users, setUsers] = useState<User[]>([])
@@ -82,17 +99,35 @@ export default function SuperadminPage() {
   const [userWorkspaces, setUserWorkspaces] = useState<Record<string, UserWorkspace[]>>({})
   const [loadingWorkspaces, setLoadingWorkspaces] = useState<string | null>(null)
 
+  // All workspaces (admin)
+  const [workspaces, setWorkspaces] = useState<AdminWorkspace[]>([])
+
+  // Create user
+  const [createUserOpen, setCreateUserOpen] = useState(false)
+  const [createUserForm, setCreateUserForm] = useState({ email: '', nombre: '', is_superadmin: false })
+  const [createdCreds, setCreatedCreds] = useState<{ email: string; password: string } | null>(null)
+
+  // Create workspace
+  const [createWsOpen, setCreateWsOpen] = useState(false)
+  const [createWsForm, setCreateWsForm] = useState({ nombre: '', owner_id: '' })
+
+  // Assign workspace to user
+  const [assignWsUser, setAssignWsUser] = useState<User | null>(null)
+  const [assignWsForm, setAssignWsForm] = useState({ workspace_id: '', rol: 'member' })
+
   const load = async () => {
     setLoading(true)
     try {
-      const [planesRes, usersRes, metricsRes] = await Promise.all([
+      const [planesRes, usersRes, metricsRes, wsRes] = await Promise.all([
         api.get<Plan[]>('/superadmin/plans'),
         api.get<User[]>('/superadmin/users'),
         api.get<Metrics>('/superadmin/metrics'),
+        api.get<AdminWorkspace[]>('/superadmin/workspaces'),
       ])
       setPlanes(planesRes.data)
       setUsers(usersRes.data)
       setMetrics(metricsRes.data)
+      setWorkspaces(wsRes.data)
     } catch (err) {
       toast({ title: getErrorMessage(err), variant: 'destructive' })
     } finally {
@@ -256,6 +291,87 @@ export default function SuperadminPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const handleCreateUser = async () => {
+    if (!createUserForm.email.trim() || !createUserForm.nombre.trim()) return
+    setSaving(true)
+    try {
+      const { data } = await api.post<{ user: User; temp_password: string }>('/superadmin/users', {
+        email: createUserForm.email.trim(),
+        nombre: createUserForm.nombre.trim(),
+        is_superadmin: createUserForm.is_superadmin,
+      })
+      setUsers((u) => [...u, data.user])
+      setCreateUserOpen(false)
+      setCreateUserForm({ email: '', nombre: '', is_superadmin: false })
+      setCreatedCreds({ email: data.user.email, password: data.temp_password })
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleCreateWorkspace = async () => {
+    if (!createWsForm.nombre.trim() || !createWsForm.owner_id) return
+    setSaving(true)
+    try {
+      await api.post('/superadmin/workspaces', {
+        nombre: createWsForm.nombre.trim(),
+        owner_id: createWsForm.owner_id,
+      })
+      const { data } = await api.get<AdminWorkspace[]>('/superadmin/workspaces')
+      setWorkspaces(data)
+      // Invalidar la caché de workspaces del owner para que se recargue
+      setUserWorkspaces((prev) => {
+        const next = { ...prev }
+        delete next[createWsForm.owner_id]
+        return next
+      })
+      setCreateWsOpen(false)
+      setCreateWsForm({ nombre: '', owner_id: '' })
+      toast({ title: 'Workspace creado' })
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleAssignWorkspace = async () => {
+    if (!assignWsUser || !assignWsForm.workspace_id) return
+    setSaving(true)
+    try {
+      await api.post(`/superadmin/users/${assignWsUser.id}/workspaces`, {
+        workspace_id: assignWsForm.workspace_id,
+        rol: assignWsForm.rol,
+      })
+      // Recargar los workspaces de ese usuario
+      const { data } = await api.get<UserWorkspace[]>(`/superadmin/users/${assignWsUser.id}/workspaces`)
+      setUserWorkspaces((prev) => ({ ...prev, [assignWsUser.id]: data }))
+      setAssignWsUser(null)
+      setAssignWsForm({ workspace_id: '', rol: 'member' })
+      toast({ title: 'Workspace asignado' })
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUnassignWorkspace = async (user: User, workspaceId: string) => {
+    if (!confirm('¿Quitar a este usuario del workspace?')) return
+    try {
+      await api.delete(`/superadmin/users/${user.id}/workspaces/${workspaceId}`)
+      setUserWorkspaces((prev) => ({
+        ...prev,
+        [user.id]: (prev[user.id] ?? []).filter((w) => w.workspace_id !== workspaceId),
+      }))
+      toast({ title: 'Workspace desasignado' })
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    }
+  }
+
   if (loading) {
     return (
       <div className="space-y-4 max-w-5xl">
@@ -293,10 +409,17 @@ export default function SuperadminPage() {
       <Tabs defaultValue="usuarios">
         <TabsList>
           <TabsTrigger value="usuarios">Usuarios</TabsTrigger>
+          <TabsTrigger value="workspaces">Workspaces</TabsTrigger>
           <TabsTrigger value="planes">Planes</TabsTrigger>
         </TabsList>
 
         <TabsContent value="usuarios" className="mt-4 space-y-2">
+          <div className="flex justify-end">
+            <Button size="sm" onClick={() => { setCreateUserForm({ email: '', nombre: '', is_superadmin: false }); setCreateUserOpen(true) }}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Crear usuario
+            </Button>
+          </div>
           {users.map((user) => (
             <div key={user.id} className="border border-border rounded-lg overflow-hidden">
               {/* User row */}
@@ -419,24 +542,77 @@ export default function SuperadminPage() {
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       Cargando workspaces...
                     </div>
-                  ) : (userWorkspaces[user.id] ?? []).length === 0 ? (
-                    <p className="text-xs text-muted-foreground">Sin workspaces</p>
                   ) : (
-                    <div className="space-y-1.5">
-                      {(userWorkspaces[user.id] ?? []).map((ws) => (
-                        <div key={ws.workspace_id} className="flex items-center gap-3 text-xs">
-                          <Building2 className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                          <span className="flex-1 font-medium">{ws.nombre}</span>
-                          <Badge variant="outline" className="text-xs capitalize">{ws.rol}</Badge>
-                          <span className="text-muted-foreground">{ws.proyectos_count} proyectos</span>
+                    <div className="space-y-2">
+                      {(userWorkspaces[user.id] ?? []).length === 0 ? (
+                        <p className="text-xs text-muted-foreground">Sin workspaces</p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {(userWorkspaces[user.id] ?? []).map((ws) => (
+                            <div key={ws.workspace_id} className="flex items-center gap-3 text-xs">
+                              <Building2 className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                              <span className="flex-1 font-medium">{ws.nombre}</span>
+                              <Badge variant="outline" className="text-xs capitalize">{ws.rol}</Badge>
+                              <span className="text-muted-foreground hidden sm:inline">{ws.proyectos_count} proyectos</span>
+                              {ws.rol !== 'owner' && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                                  onClick={() => handleUnassignWorkspace(user, ws.workspace_id)}
+                                  title="Quitar del workspace"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => { setAssignWsUser(user); setAssignWsForm({ workspace_id: '', rol: 'member' }) }}
+                      >
+                        <Plus className="mr-1 h-3 w-3" />
+                        Asignar a workspace
+                      </Button>
                     </div>
                   )}
                 </div>
               )}
             </div>
           ))}
+        </TabsContent>
+
+        <TabsContent value="workspaces" className="mt-4 space-y-3">
+          <div className="flex justify-end">
+            <Button size="sm" onClick={() => { setCreateWsForm({ nombre: '', owner_id: '' }); setCreateWsOpen(true) }}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Crear workspace
+            </Button>
+          </div>
+          {workspaces.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No hay workspaces.</p>
+          ) : (
+            <div className="space-y-2">
+              {workspaces.map((ws) => (
+                <div key={ws.id} className="flex items-center gap-3 bg-card border border-border rounded-md px-4 py-3">
+                  <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{ws.nombre}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      Owner: {ws.owner_nombre || ws.owner_email || '—'}
+                    </p>
+                  </div>
+                  <span className="text-xs text-muted-foreground hidden sm:inline">{ws.miembros_count} miembros</span>
+                  <span className="text-xs text-muted-foreground hidden sm:inline">·</span>
+                  <span className="text-xs text-muted-foreground hidden sm:inline">{ws.proyectos_count} proyectos</span>
+                </div>
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="planes" className="mt-4 space-y-3">
@@ -607,6 +783,152 @@ export default function SuperadminPage() {
           <DialogFooter>
             <Button onClick={() => { setResetPasswordUser(null); setResetPasswordResult(null); setCopied(false) }}>
               Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create user dialog */}
+      <Dialog open={createUserOpen} onOpenChange={(v) => !v && setCreateUserOpen(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Crear usuario</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Nombre</Label>
+              <Input value={createUserForm.nombre} onChange={(e) => setCreateUserForm((f) => ({ ...f, nombre: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Email</Label>
+              <Input type="email" value={createUserForm.email} onChange={(e) => setCreateUserForm((f) => ({ ...f, email: e.target.value }))} />
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch checked={createUserForm.is_superadmin} onCheckedChange={(v) => setCreateUserForm((f) => ({ ...f, is_superadmin: v }))} />
+              <Label>Superadmin</Label>
+            </div>
+            <p className="text-xs text-muted-foreground">Se generará una contraseña temporal que verás una sola vez.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateUserOpen(false)}>Cancelar</Button>
+            <Button onClick={handleCreateUser} disabled={saving || !createUserForm.email.trim() || !createUserForm.nombre.trim()}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Crear
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Created user credentials dialog */}
+      <Dialog open={!!createdCreds} onOpenChange={(v) => { if (!v) { setCreatedCreds(null); setCopied(false) } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Usuario creado</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Contraseña temporal para <span className="font-medium text-foreground">{createdCreds?.email}</span>:
+            </p>
+            <div className="flex items-center gap-2 p-3 bg-muted rounded-md font-mono text-sm">
+              <span className="flex-1 select-all">{createdCreds?.password}</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => {
+                  if (createdCreds) {
+                    navigator.clipboard.writeText(createdCreds.password)
+                    setCopied(true)
+                    setTimeout(() => setCopied(false), 2000)
+                  }
+                }}
+              >
+                {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">Comparte esta contraseña con el usuario. Solo se muestra una vez.</p>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => { setCreatedCreds(null); setCopied(false) }}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create workspace dialog */}
+      <Dialog open={createWsOpen} onOpenChange={(v) => !v && setCreateWsOpen(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Crear workspace</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Nombre</Label>
+              <Input value={createWsForm.nombre} onChange={(e) => setCreateWsForm((f) => ({ ...f, nombre: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Owner</Label>
+              <Select value={createWsForm.owner_id} onValueChange={(v) => setCreateWsForm((f) => ({ ...f, owner_id: v }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un usuario" />
+                </SelectTrigger>
+                <SelectContent>
+                  {users.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>{u.nombre || u.email} ({u.email})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateWsOpen(false)}>Cancelar</Button>
+            <Button onClick={handleCreateWorkspace} disabled={saving || !createWsForm.nombre.trim() || !createWsForm.owner_id}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Crear
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign workspace dialog */}
+      <Dialog open={!!assignWsUser} onOpenChange={(v) => !v && setAssignWsUser(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Asignar workspace</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Label className="text-muted-foreground text-xs">{assignWsUser?.email}</Label>
+            <div className="space-y-1.5">
+              <Label>Workspace</Label>
+              <Select value={assignWsForm.workspace_id} onValueChange={(v) => setAssignWsForm((f) => ({ ...f, workspace_id: v }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un workspace" />
+                </SelectTrigger>
+                <SelectContent>
+                  {workspaces.map((w) => (
+                    <SelectItem key={w.id} value={w.id}>{w.nombre}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Rol</Label>
+              <Select value={assignWsForm.rol} onValueChange={(v) => setAssignWsForm((f) => ({ ...f, rol: v }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROLES.map((r) => (
+                    <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignWsUser(null)}>Cancelar</Button>
+            <Button onClick={handleAssignWorkspace} disabled={saving || !assignWsForm.workspace_id}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Asignar
             </Button>
           </DialogFooter>
         </DialogContent>

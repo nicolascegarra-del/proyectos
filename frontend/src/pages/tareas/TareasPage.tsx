@@ -10,6 +10,7 @@ import { Lock, Plus, Pencil } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from '@/components/ui/use-toast'
 import { TareaModal } from '@/components/tareas/TareaModal'
+import { TagBadges } from '@/components/etiquetas/TagBadges'
 
 const ESTADO_PAGO_COLORS: Record<EstadoPago, string> = {
   pendiente: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
@@ -110,7 +111,6 @@ export default function TareasPage() {
     setTareas((prev) => prev.filter((t) => t.id !== id))
   }
 
-  const tagMap = new Map(tags.map((t) => [t.id, t]))
   const proyectoMap = new Map(proyectos.map((p) => [p.id, p]))
 
   const filtered = tareas
@@ -197,7 +197,6 @@ export default function TareasPage() {
         ) : (
           filtered.map((tarea) => {
             const proyecto = proyectoMap.get(tarea.proyecto_id)
-            const tag = tarea.tag_id ? tagMap.get(tarea.tag_id) : undefined
             const kanbanList = kanbanByProyecto.get(tarea.proyecto_id) || []
             const kanbanEstado = kanbanList.find(k => k.id === tarea.estado_kanban)
             return (
@@ -210,13 +209,10 @@ export default function TareasPage() {
                     <p className="text-sm truncate">{tarea.descripcion}</p>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <span>{proyecto?.nombre ?? '—'}</span>
-                      {tag && (
+                      {tarea.tags?.length > 0 && (
                         <>
                           <span>·</span>
-                          <span className="inline-flex items-center gap-1" style={{ color: tag.color }}>
-                            <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                            {tag.nombre}
-                          </span>
+                          <TagBadges tags={tarea.tags} />
                         </>
                       )}
                     </div>

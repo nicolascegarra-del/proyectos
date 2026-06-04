@@ -174,9 +174,14 @@ class RetainerCiclo(SQLModel, table=True):
 
 class Tag(SQLModel, table=True):
     __tablename__ = "tag"
+    __table_args__ = (
+        Index("ix_tag_user_workspace", "user_id", "workspace_id"),
+    )
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     workspace_id: uuid.UUID = Field(foreign_key="workspace.id", index=True)
+    # Las etiquetas son privadas del usuario que las crea (visibles solo para él dentro del workspace).
+    user_id: uuid.UUID = Field(foreign_key="user.id", index=True)
     nombre: str = Field(max_length=100)
     color: str = Field(max_length=7)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
@@ -236,7 +241,6 @@ class Tarea(SQLModel, table=True):
     is_locked: bool = False
     es_backlog: bool = False
     estado_kanban: uuid.UUID = Field(foreign_key="kanban_estado.id", index=True)
-    tag_id: Optional[uuid.UUID] = Field(default=None, foreign_key="tag.id")
     descripcion_larga: Optional[str] = None
     github_url: Optional[str] = Field(default=None, max_length=500)
     archivo_url: Optional[str] = Field(default=None, max_length=500)
@@ -248,6 +252,18 @@ class Tarea(SQLModel, table=True):
     assigned_to: Optional[uuid.UUID] = Field(default=None, foreign_key="user.id", index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+
+class TareaTag(SQLModel, table=True):
+    """Relación N-a-N entre tareas y etiquetas (multietiqueta)."""
+    __tablename__ = "tarea_tag"
+    __table_args__ = (
+        Index("ix_tarea_tag_unique", "tarea_id", "tag_id", unique=True),
+    )
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    tarea_id: uuid.UUID = Field(foreign_key="tarea.id", index=True)
+    tag_id: uuid.UUID = Field(foreign_key="tag.id", index=True)
 
 
 class TipoPagoGasto(str, Enum):
@@ -343,14 +359,6 @@ class Subtarea(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
-class TipoNota(str, Enum):
-    general = "general"
-    reunion = "reunion"
-    decision = "decision"
-    bloqueante = "bloqueante"
-    acuerdo = "acuerdo"
-
-
 class NotaProyecto(SQLModel, table=True):
     __tablename__ = "nota_proyecto"
     __table_args__ = (
@@ -361,8 +369,19 @@ class NotaProyecto(SQLModel, table=True):
     proyecto_id: uuid.UUID = Field(foreign_key="proyecto.id", index=True)
     user_id: uuid.UUID = Field(foreign_key="user.id", index=True)
     texto: str = Field(sa_column=Column(Text, nullable=False))
-    tipo: TipoNota = Field(default=TipoNota.general)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+
+class NotaTag(SQLModel, table=True):
+    """Relación N-a-N entre notas de proyecto y etiquetas (multietiqueta)."""
+    __tablename__ = "nota_tag"
+    __table_args__ = (
+        Index("ix_nota_tag_unique", "nota_id", "tag_id", unique=True),
+    )
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    nota_id: uuid.UUID = Field(foreign_key="nota_proyecto.id", index=True)
+    tag_id: uuid.UUID = Field(foreign_key="tag.id", index=True)
 
 
 class ProyectoMiembro(SQLModel, table=True):

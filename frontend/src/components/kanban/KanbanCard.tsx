@@ -1,6 +1,6 @@
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import type { Tarea, Tag } from '@/types'
+import type { Tarea } from '@/types'
 import { cn, formatHoras } from '@/lib/utils'
 import { Lock, Clock, Github, Paperclip, GripVertical, CheckCheck, ListChecks } from 'lucide-react'
 
@@ -20,13 +20,12 @@ const PRIORIDAD_LABELS = {
 
 interface KanbanCardProps {
   tarea: Tarea
-  tag?: Tag
   onClick?: (tarea: Tarea) => void
   onMarkDone?: (tareaId: string, estadoId: string) => void
   isFinalEstado?: boolean
 }
 
-export function KanbanCard({ tarea, tag, onClick, onMarkDone, isFinalEstado = false }: KanbanCardProps) {
+export function KanbanCard({ tarea, onClick, onMarkDone, isFinalEstado = false }: KanbanCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: tarea.id,
     disabled: tarea.is_locked,
@@ -132,13 +131,14 @@ export function KanbanCard({ tarea, tag, onClick, onMarkDone, isFinalEstado = fa
               )}
             </div>
           )}
-          {tag && (
+          {(tarea.tags ?? []).map((t) => (
             <span
+              key={t.id}
               className="inline-block w-2 h-2 rounded-full flex-shrink-0"
-              style={{ backgroundColor: tag.color }}
-              title={tag.nombre}
+              style={{ backgroundColor: t.color }}
+              title={t.nombre}
             />
-          )}
+          ))}
         </div>
       </div>
 

@@ -44,7 +44,7 @@ describe('Offline sync queue', () => {
       is_locked: false,
       es_backlog: false,
       estado_kanban: 'todo' as const,
-      tag_id: null,
+      tags: [],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }

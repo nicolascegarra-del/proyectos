@@ -14,7 +14,6 @@ from app.models import (
     PeriodicidadGasto,
     Prioridad,
     RolWorkspace,
-    TipoNota,
     TipoPagoGasto,
 )
 
@@ -423,6 +422,7 @@ class TagUpdate(BaseModel):
 class TagOut(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID
+    user_id: uuid.UUID
     nombre: str
     color: str
     model_config = {"from_attributes": True}
@@ -484,7 +484,7 @@ class TareaCreate(BaseModel):
     estado_pago: EstadoPago = EstadoPago.pendiente
     es_backlog: bool = False
     estado_kanban: Optional[uuid.UUID] = None   # si None → se asigna el primer estado del proyecto
-    tag_id: Optional[uuid.UUID] = None
+    tag_ids: list[uuid.UUID] = Field(default_factory=list)
     descripcion_larga: Optional[str] = Field(default=None, max_length=10000)
     github_url: Optional[str] = None
     archivo_url: Optional[str] = None
@@ -509,7 +509,7 @@ class TareaUpdate(BaseModel):
     is_locked: Optional[bool] = None
     es_backlog: Optional[bool] = None
     estado_kanban: Optional[uuid.UUID] = None
-    tag_id: Optional[uuid.UUID] = None
+    tag_ids: Optional[list[uuid.UUID]] = None
     descripcion_larga: Optional[str] = Field(default=None, max_length=10000)
     github_url: Optional[str] = None
     archivo_url: Optional[str] = None
@@ -536,7 +536,7 @@ class TareaOut(BaseModel):
     is_locked: bool
     es_backlog: bool
     estado_kanban: uuid.UUID
-    tag_id: Optional[uuid.UUID]
+    tags: list[TagOut] = Field(default_factory=list)
     descripcion_larga: Optional[str]
     github_url: Optional[str]
     archivo_url: Optional[str]
@@ -811,7 +811,6 @@ class PublicTareaOut(BaseModel):
     horas: float
     fecha: date
     estado_kanban: EstadoKanban
-    tag_id: Optional[uuid.UUID]
     created_at: datetime
     model_config = {"from_attributes": True}
 
@@ -854,11 +853,44 @@ class ResetPasswordOut(BaseModel):
     new_password: str
 
 
+class SuperadminCreateUser(BaseModel):
+    email: EmailStr
+    nombre: str
+    is_superadmin: bool = False
+    plan_id: Optional[uuid.UUID] = None
+
+
+class SuperadminCreateUserOut(BaseModel):
+    user: UserOut
+    temp_password: str
+
+
+class SuperadminCreateWorkspace(BaseModel):
+    nombre: str
+    owner_id: uuid.UUID
+
+
+class AssignWorkspaceRequest(BaseModel):
+    workspace_id: uuid.UUID
+    rol: RolWorkspace = RolWorkspace.member
+
+
+class WorkspaceAdminOut(BaseModel):
+    id: uuid.UUID
+    nombre: str
+    owner_id: uuid.UUID
+    owner_nombre: Optional[str] = None
+    owner_email: Optional[str] = None
+    miembros_count: int = 0
+    proyectos_count: int = 0
+    created_at: datetime
+
+
 # ── NotaProyecto ──────────────────────────────────────────────────────────────
 
 class NotaCreate(BaseModel):
     texto: str = Field(min_length=1)
-    tipo: TipoNota = TipoNota.general
+    tag_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
 class NotaOut(BaseModel):
@@ -866,7 +898,7 @@ class NotaOut(BaseModel):
     proyecto_id: uuid.UUID
     user_id: uuid.UUID
     texto: str
-    tipo: TipoNota
+    tags: list[TagOut] = Field(default_factory=list)
     created_at: datetime
     autor_nombre: Optional[str] = None
     autor_email: Optional[str] = None

@@ -161,7 +161,7 @@ export default function ProyectoDetailPage() {
         is_locked: false,
         es_backlog: false,
         estado_kanban: 'todo',
-        tag_id: null,
+        tags: [],
         descripcion_larga: null,
         github_url: null,
         archivo_url: null,

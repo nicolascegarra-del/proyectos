@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertDialog } from '@/components/ui/alert-dialog'
+import { TagPicker } from '@/components/etiquetas/TagPicker'
 import { Check, ChevronDown, ChevronUp, Loader2, MessageSquare, Paperclip, Plus, Trash2, X, ExternalLink } from 'lucide-react'
 import { toast } from '@/components/ui/use-toast'
 
@@ -40,7 +41,7 @@ type FormState = {
   descripcion_larga: string
   horas: string
   fecha: string
-  tag_id: string
+  tag_ids: string[]
   prioridad: string
   github_url: string
   estado_pago: EstadoPago
@@ -55,7 +56,7 @@ const emptyForm = (): FormState => ({
   descripcion_larga: '',
   horas: '0',
   fecha: today(),
-  tag_id: '',
+  tag_ids: [],
   prioridad: '',
   github_url: '',
   estado_pago: 'pendiente',
@@ -130,7 +131,7 @@ export function TareaModal({
           descripcion_larga: tarea.descripcion_larga ?? '',
           horas: tarea.horas.toString(),
           fecha: tarea.fecha,
-          tag_id: tarea.tag_id ?? '',
+          tag_ids: (tarea.tags ?? []).map((t) => t.id),
           prioridad: tarea.prioridad ?? '',
           github_url: tarea.github_url ?? '',
           estado_pago: tarea.estado_pago,
@@ -249,7 +250,7 @@ export function TareaModal({
         descripcion_larga: form.descripcion_larga || null,
         horas: parseFloat(form.horas) || 0,
         fecha: form.fecha,
-        tag_id: form.tag_id || null,
+        tag_ids: form.tag_ids,
         prioridad: (form.prioridad as Prioridad) || null,
         github_url: form.github_url || null,
         estado_pago: form.estado_pago,
@@ -723,25 +724,15 @@ export function TareaModal({
               )}
             </div>
 
-            {/* Tag */}
+            {/* Etiquetas (multietiqueta) */}
             <div className="space-y-1.5">
-              <Label>Etiqueta</Label>
-              <Select value={form.tag_id} onValueChange={(v) => set('tag_id', v === 'none' ? '' : v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Sin etiqueta" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Sin etiqueta</SelectItem>
-                  {tags.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      <span className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: t.color }} />
-                        {t.nombre}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Etiquetas</Label>
+              <TagPicker
+                tags={tags}
+                value={form.tag_ids}
+                onChange={(ids) => setForm((f) => ({ ...f, tag_ids: ids }))}
+                emptyHint="No tienes etiquetas. Créalas en el menú Etiquetas."
+              />
             </div>
 
             {/* Sprint (solo en edición, si hay sprints disponibles) */}

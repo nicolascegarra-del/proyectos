@@ -26,9 +26,10 @@ from app.models import (
     Subtarea,
     Tag,
     Tarea,
+    TareaTag,
     User,
 )
-from app.schemas import TareaCreate, TareaOut, TareaUpdate
+from app.schemas import TagOut, TareaCreate, TareaOut, TareaUpdate
 from app.services.limits import ResourceType, check_limit
 from app.services.sanitize import sanitize_html
 from app.services.webhook import trigger_webhook_background
@@ -124,6 +125,60 @@ def _apply_assigned_user(out: TareaOut, user: User | None) -> None:
         out.assigned_to_avatar_url = user.avatar_url
 
 
+async def _validate_tags(
+    tag_ids: list[uuid.UUID],
+    workspace_id: uuid.UUID,
+    user_id: uuid.UUID,
+    session: AsyncSession,
+) -> list[Tag]:
+    """Valida que las etiquetas existan y pertenezcan al usuario en el workspace."""
+    unique = list(dict.fromkeys(tag_ids or []))
+    if not unique:
+        return []
+    rows = await session.exec(
+        select(Tag).where(
+            Tag.id.in_(unique),
+            Tag.workspace_id == workspace_id,
+            Tag.user_id == user_id,
+        )
+    )
+    found = rows.all()
+    if len(found) != len(unique):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Una o más etiquetas no existen o no te pertenecen",
+        )
+    return found
+
+
+async def _get_tags_for_tareas(
+    tarea_ids: list[uuid.UUID], session: AsyncSession
+) -> dict[uuid.UUID, list[Tag]]:
+    """Carga las etiquetas de varias tareas en una sola query (evita N+1)."""
+    if not tarea_ids:
+        return {}
+    rows = await session.exec(
+        select(TareaTag.tarea_id, Tag)
+        .join(Tag, Tag.id == TareaTag.tag_id)
+        .where(TareaTag.tarea_id.in_(tarea_ids))
+    )
+    out: dict[uuid.UUID, list[Tag]] = {}
+    for tarea_id, tag in rows.all():
+        out.setdefault(tarea_id, []).append(tag)
+    return out
+
+
+async def _sync_tarea_tags(
+    tarea_id: uuid.UUID, tags: list[Tag], session: AsyncSession
+) -> None:
+    """Reemplaza el conjunto de etiquetas de una tarea por el indicado."""
+    from sqlalchemy import delete as sa_delete
+
+    await session.execute(sa_delete(TareaTag).where(TareaTag.tarea_id == tarea_id))
+    for tag in tags:
+        session.add(TareaTag(tarea_id=tarea_id, tag_id=tag.id))
+
+
 @router.get("", response_model=list[TareaOut])
 async def list_tareas(
     workspace_id: uuid.UUID,
@@ -140,12 +195,14 @@ async def list_tareas(
     tareas = result.all()
     counts = await _get_subtarea_counts([t.id for t in tareas], session)
     users_map = await _get_assigned_users([(t.id, t.assigned_to) for t in tareas], session)
+    tags_map = await _get_tags_for_tareas([t.id for t in tareas], session)
     outs = []
     for t in tareas:
         out = TareaOut.model_validate(t)
         total, hechas = counts.get(t.id, (0, 0))
         out.subtareas_total = total
         out.subtareas_completadas = hechas
+        out.tags = [TagOut.model_validate(tag) for tag in tags_map.get(t.id, [])]
         if t.assigned_to:
             _apply_assigned_user(out, users_map.get(t.assigned_to))
         outs.append(out)
@@ -169,12 +226,7 @@ async def create_tarea(
         session, current_user, ResourceType.tarea, proyecto_id=proyecto_id
     )
 
-    if data.tag_id:
-        tag_result = await session.exec(
-            select(Tag).where(Tag.id == data.tag_id, Tag.workspace_id == workspace_id)
-        )
-        if not tag_result.first():
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tag no encontrado en este workspace")
+    tags = await _validate_tags(data.tag_ids, workspace_id, current_user.id, session)
 
     if data.assigned_to:
         await _assert_member_of_proyecto(proyecto_id, data.assigned_to, session)
@@ -194,11 +246,15 @@ async def create_tarea(
 
     tarea_data = data.model_dump()
     subtareas_payload = tarea_data.pop("subtareas", []) or []
+    tarea_data.pop("tag_ids", None)
     tarea_data["estado_kanban"] = estado_kanban_id
     tarea_data["descripcion_larga"] = sanitize_html(tarea_data.get("descripcion_larga"))
     tarea = Tarea(proyecto_id=proyecto_id, **tarea_data)
     session.add(tarea)
     await session.flush()
+
+    for tag in tags:
+        session.add(TareaTag(tarea_id=tarea.id, tag_id=tag.id))
 
     for sub in subtareas_payload:
         if not sub.get("descripcion") or not sub["descripcion"].strip():
@@ -225,6 +281,7 @@ async def create_tarea(
     total, hechas = counts.get(tarea.id, (0, 0))
     out.subtareas_total = total
     out.subtareas_completadas = hechas
+    out.tags = [TagOut.model_validate(tag) for tag in tags]
     if tarea.assigned_to:
         user_map = await _get_assigned_users([(tarea.id, tarea.assigned_to)], session)
         _apply_assigned_user(out, user_map.get(tarea.assigned_to))
@@ -247,10 +304,12 @@ async def get_tarea(
     if not tarea:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tarea no encontrada")
     counts = await _get_subtarea_counts([tarea.id], session)
+    tags_map = await _get_tags_for_tareas([tarea.id], session)
     out = TareaOut.model_validate(tarea)
     total, hechas = counts.get(tarea.id, (0, 0))
     out.subtareas_total = total
     out.subtareas_completadas = hechas
+    out.tags = [TagOut.model_validate(tag) for tag in tags_map.get(tarea.id, [])]
     if tarea.assigned_to:
         user_map = await _get_assigned_users([(tarea.id, tarea.assigned_to)], session)
         _apply_assigned_user(out, user_map.get(tarea.assigned_to))
@@ -263,6 +322,7 @@ async def update_tarea(
     proyecto_id: uuid.UUID,
     tarea_id: uuid.UUID,
     data: TareaUpdate,
+    current_user: User = Depends(get_current_user),
     member=Depends(get_workspace_member),
     session: AsyncSession = Depends(get_session),
 ):
@@ -283,12 +343,10 @@ async def update_tarea(
             detail="La tarea está bloqueada y no se puede editar",
         )
 
-    if data.tag_id:
-        tag_result = await session.exec(
-            select(Tag).where(Tag.id == data.tag_id, Tag.workspace_id == workspace_id)
-        )
-        if not tag_result.first():
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tag no encontrado en este workspace")
+    # Si se proveen tag_ids (aunque sea lista vacía), se reemplaza el conjunto de etiquetas.
+    tags_to_set: list[Tag] | None = None
+    if "tag_ids" in data.model_fields_set:
+        tags_to_set = await _validate_tags(data.tag_ids or [], workspace_id, current_user.id, session)
 
     if data.assigned_to is not None:
         await _assert_member_of_proyecto(proyecto_id, data.assigned_to, session)
@@ -300,6 +358,7 @@ async def update_tarea(
     if 'assigned_to' in data.model_fields_set:
         tarea.assigned_to = data.assigned_to
     payload = data.model_dump(exclude_none=True)
+    payload.pop("tag_ids", None)  # las etiquetas se sincronizan aparte (relación N-a-N)
     if "descripcion_larga" in payload:
         payload["descripcion_larga"] = sanitize_html(payload["descripcion_larga"])
     for field, value in payload.items():
@@ -308,6 +367,8 @@ async def update_tarea(
         setattr(tarea, field, value)
     tarea.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     session.add(tarea)
+    if tags_to_set is not None:
+        await _sync_tarea_tags(tarea.id, tags_to_set, session)
     await session.commit()
     await session.refresh(tarea)
 
@@ -330,12 +391,14 @@ async def update_tarea(
 
     alerta_horas, alerta_retainer = await _check_alerts(proyecto, session)
     counts = await _get_subtarea_counts([tarea.id], session)
+    tags_map = await _get_tags_for_tareas([tarea.id], session)
     out = TareaOut.model_validate(tarea)
     out.alerta_horas = alerta_horas
     out.alerta_retainer = alerta_retainer
     total, hechas = counts.get(tarea.id, (0, 0))
     out.subtareas_total = total
     out.subtareas_completadas = hechas
+    out.tags = [TagOut.model_validate(tag) for tag in tags_map.get(tarea.id, [])]
     if tarea.assigned_to:
         user_map = await _get_assigned_users([(tarea.id, tarea.assigned_to)], session)
         _apply_assigned_user(out, user_map.get(tarea.assigned_to))
@@ -407,5 +470,7 @@ async def delete_tarea(
             detail="La tarea está bloqueada y no se puede eliminar",
         )
 
+    from sqlalchemy import delete as sa_delete
+    await session.execute(sa_delete(TareaTag).where(TareaTag.tarea_id == tarea_id))
     await session.delete(tarea)
     await session.commit()

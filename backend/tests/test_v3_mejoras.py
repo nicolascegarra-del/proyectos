@@ -19,8 +19,8 @@ from app.models import (
     NotaProyecto,
     Proyecto,
     ProyectoMiembro,
+    Tag,
     Tarea,
-    TipoNota,
     User,
     Workspace,
 )
@@ -211,12 +211,12 @@ async def test_crear_nota_html_vacio_da_400(
     assert resp.status_code == 400
 
 
-# ── M4: tipo en NotaProyecto ─────────────────────────────────────────────────
+# ── M4: etiquetas en NotaProyecto ────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_nota_tipo_default_general(
-    client, auth_headers, session: AsyncSession, workspace: Workspace, proyecto: Proyecto,
+async def test_nota_sin_etiquetas_por_defecto(
+    client, auth_headers, workspace: Workspace, proyecto: Proyecto,
 ):
     resp = await client.post(
         f"/workspaces/{workspace.id}/proyectos/{proyecto.id}/notas",
@@ -224,27 +224,36 @@ async def test_nota_tipo_default_general(
         headers=auth_headers,
     )
     assert resp.status_code == 201, resp.text
-    assert resp.json()["tipo"] == TipoNota.general.value
-
-    nota = (
-        await session.exec(select(NotaProyecto).where(NotaProyecto.id == uuid.UUID(resp.json()["id"])))
-    ).first()
-    assert nota is not None
-    assert nota.tipo == TipoNota.general
+    assert resp.json()["tags"] == []
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("tipo", ["reunion", "decision", "bloqueante", "acuerdo"])
-async def test_nota_tipo_explicito_se_persiste(
-    tipo, client, auth_headers, workspace: Workspace, proyecto: Proyecto,
+async def test_nota_con_etiqueta_se_persiste_y_devuelve(
+    client, auth_headers, session: AsyncSession, workspace: Workspace, proyecto: Proyecto,
+    user: User,
 ):
+    tag = Tag(workspace_id=workspace.id, user_id=user.id, nombre="Reunión", color="#EAB308")
+    session.add(tag)
+    await session.commit()
+    await session.refresh(tag)
+
     resp = await client.post(
         f"/workspaces/{workspace.id}/proyectos/{proyecto.id}/notas",
-        json={"texto": "<p>n</p>", "tipo": tipo},
+        json={"texto": "<p>n</p>", "tag_ids": [str(tag.id)]},
         headers=auth_headers,
     )
     assert resp.status_code == 201, resp.text
-    assert resp.json()["tipo"] == tipo
+    tags = resp.json()["tags"]
+    assert len(tags) == 1
+    assert tags[0]["nombre"] == "Reunión"
+
+    # Filtrado por etiqueta
+    resp_filtro = await client.get(
+        f"/workspaces/{workspace.id}/proyectos/{proyecto.id}/notas?tag_id={tag.id}",
+        headers=auth_headers,
+    )
+    assert resp_filtro.status_code == 200
+    assert len(resp_filtro.json()) == 1
 
 
 # ── M5: estado, descripcion y fechas en Proyecto ─────────────────────────────

@@ -6,6 +6,7 @@ import {
   Users,
   FileText,
   Building2,
+  Tags,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 
@@ -14,6 +15,7 @@ const navItems = [
   { to: '/proyectos', label: 'Proyectos', icon: FolderKanban },
   { to: '/presupuestos', label: 'Presupuestos', icon: FileText },
   { to: '/clientes', label: 'Clientes', icon: Users },
+  { to: '/etiquetas', label: 'Etiquetas', icon: Tags },
 ]
 
 interface SidebarProps {

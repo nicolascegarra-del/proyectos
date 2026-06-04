@@ -3,7 +3,6 @@ export type EstadoPago = 'pendiente' | 'facturado' | 'cobrado'
 export type EstadoPresupuesto = 'borrador' | 'enviado' | 'aceptado' | 'rechazado'
 export type EstadoProyecto = 'activo' | 'pausado' | 'completado' | 'archivado'
 export type Prioridad = 'critico' | 'alto' | 'medio' | 'bajo'
-export type TipoNota = 'general' | 'reunion' | 'decision' | 'bloqueante' | 'acuerdo'
 
 export interface KanbanEstado {
   id: string
@@ -124,6 +123,7 @@ export interface RetainerCiclo {
 export interface Tag {
   id: string
   workspace_id: string
+  user_id: string
   nombre: string
   color: string
 }
@@ -138,7 +138,7 @@ export interface Tarea {
   is_locked: boolean
   es_backlog: boolean
   estado_kanban: string   // UUID of KanbanEstado
-  tag_id: string | null
+  tags: Tag[]
   descripcion_larga: string | null
   github_url: string | null
   archivo_url: string | null
@@ -182,7 +182,7 @@ export interface NotaProyecto {
   proyecto_id: string
   user_id: string
   texto: string
-  tipo: TipoNota
+  tags: Tag[]
   created_at: string
   autor_nombre: string | null
   autor_email: string | null

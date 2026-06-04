@@ -19,14 +19,12 @@ import { cn } from '@/lib/utils'
 function DroppableColumn({
   estado,
   tareas,
-  tags,
   isOver,
   onCardClick,
   onMarkDone,
 }: {
   estado: KanbanEstado
   tareas: Tarea[]
-  tags: Map<string, Tag>
   isOver: boolean
   onCardClick?: (t: Tarea) => void
   onMarkDone?: (tareaId: string, estadoId: string) => void
@@ -69,7 +67,6 @@ function DroppableColumn({
               <KanbanCard
                 key={tarea.id}
                 tarea={tarea}
-                tag={tarea.tag_id ? tags.get(tarea.tag_id) : undefined}
                 onClick={onCardClick}
                 onMarkDone={onMarkDone}
                 isFinalEstado={estado.es_final}
@@ -91,7 +88,7 @@ interface KanbanBoardProps {
   onCardClick?: (tarea: Tarea) => void
 }
 
-export function KanbanBoard({ tareas, tags, estados, onMoveCard, onReorderCards, onCardClick }: KanbanBoardProps) {
+export function KanbanBoard({ tareas, estados, onMoveCard, onReorderCards, onCardClick }: KanbanBoardProps) {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [overColId, setOverColId] = useState<string | null>(null)
 
@@ -100,7 +97,6 @@ export function KanbanBoard({ tareas, tags, estados, onMoveCard, onReorderCards,
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
   )
 
-  const tagMap = new Map(tags.map((t) => [t.id, t]))
   const estadoIds = new Set(estados.map((e) => e.id))
 
   // ID of the es_final estado (for quick-done button)
@@ -184,7 +180,6 @@ export function KanbanBoard({ tareas, tags, estados, onMoveCard, onReorderCards,
             key={estado.id}
             estado={estado}
             tareas={byColumn(estado.id)}
-            tags={tagMap}
             isOver={overColId === estado.id && !!activeId}
             onCardClick={onCardClick}
             onMarkDone={handleMarkDone}
@@ -195,10 +190,7 @@ export function KanbanBoard({ tareas, tags, estados, onMoveCard, onReorderCards,
       <DragOverlay dropAnimation={null}>
         {activeTarea && (
           <div className="rotate-2 shadow-xl opacity-95">
-            <KanbanCard
-              tarea={activeTarea}
-              tag={activeTarea.tag_id ? tagMap.get(activeTarea.tag_id) : undefined}
-            />
+            <KanbanCard tarea={activeTarea} />
           </div>
         )}
       </DragOverlay>

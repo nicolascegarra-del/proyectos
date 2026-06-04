@@ -17,6 +17,7 @@ import WorkspacesPage from './pages/workspaces/WorkspacesPage'
 import ProyectosPage from './pages/proyectos/ProyectosPage'
 import ProyectoDetailPage from './pages/proyectos/ProyectoDetailPage'
 import ClientesPage from './pages/clientes/ClientesPage'
+import EtiquetasPage from './pages/etiquetas/EtiquetasPage'
 import PresupuestosPage from './pages/presupuestos/PresupuestosPage'
 import PresupuestoDetailPage from './pages/presupuestos/PresupuestoDetailPage'
 import ConfiguracionPage from './pages/configuracion/ConfiguracionPage'
@@ -112,6 +113,12 @@ const clientesRoute = createRoute({
   component: ClientesPage,
 })
 
+const etiquetasRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/etiquetas',
+  component: EtiquetasPage,
+})
+
 const presupuestosRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/presupuestos',
@@ -164,6 +171,7 @@ const routeTree = rootRoute.addChildren([
     proyectosRoute,
     proyectoDetailRoute,
     clientesRoute,
+    etiquetasRoute,
     presupuestosRoute,
     presupuestoDetailRoute,
     configuracionRoute,

@@ -272,15 +272,14 @@ export function exportTareasExcel(
   proyecto: Proyecto,
   tareas: Tarea[],
   sprints: Sprint[],
-  tags: Tag[],
+  _tags: Tag[],
   kanbanEstados: KanbanEstado[] = [],
 ) {
   const ESTADO_KANBAN = buildEstadoMap(kanbanEstados)
   const sprintMap = Object.fromEntries(sprints.map((s) => [s.id, s.nombre]))
-  const tagMap = Object.fromEntries(tags.map((t) => [t.id, t.nombre]))
 
   const rows: (string | number)[][] = [
-    ['Descripción', 'Fecha', 'Horas', 'Prioridad', 'Estado Kanban', 'Estado Pago', 'Sprint', 'Tag', 'Fecha inicio', 'Fecha fin'],
+    ['Descripción', 'Fecha', 'Horas', 'Prioridad', 'Estado Kanban', 'Estado Pago', 'Sprint', 'Etiquetas', 'Fecha inicio', 'Fecha fin'],
     ...tareas.map((t) => [
       t.descripcion,
       t.fecha,
@@ -289,7 +288,7 @@ export function exportTareasExcel(
       ESTADO_KANBAN[t.estado_kanban] ?? t.estado_kanban,
       ESTADO_PAGO[t.estado_pago] ?? t.estado_pago,
       t.sprint_id ? sprintMap[t.sprint_id] ?? '' : '',
-      t.tag_id ? tagMap[t.tag_id] ?? '' : '',
+      (t.tags ?? []).map((x) => x.nombre).join(', '),
       t.fecha_inicio ?? '',
       t.fecha_fin ?? '',
     ]),

@@ -38,7 +38,7 @@ interface GanttViewProps {
   onTaskClick: (t: Tarea) => void
 }
 
-export function GanttView({ tareas, tags, sprints, kanbanEstados, onTaskClick }: GanttViewProps) {
+export function GanttView({ tareas, sprints, kanbanEstados, onTaskClick }: GanttViewProps) {
   const estadoMap = useMemo(
     () => Object.fromEntries(kanbanEstados.map((e) => [e.id, e])),
     [kanbanEstados],
@@ -57,11 +57,6 @@ export function GanttView({ tareas, tags, sprints, kanbanEstados, onTaskClick }:
   const todayOffset = differenceInDays(today, viewStart)
 
   const months = eachMonthOfInterval({ start: viewStart, end: addDays(viewEnd, -1) })
-
-  const tagMap = useMemo(
-    () => Object.fromEntries(tags.map((t) => [t.id, t])),
-    [tags],
-  )
 
   const planned = useMemo(
     () =>
@@ -132,7 +127,7 @@ export function GanttView({ tareas, tags, sprints, kanbanEstados, onTaskClick }:
 
   const TaskRow = ({ t, striped }: { t: Tarea; striped: boolean }) => {
     const bar = getTaskBar(t)
-    const tag = t.tag_id ? tagMap[t.tag_id] : null
+    const tag = t.tags?.[0] ?? null
     return (
       <div
         className={`flex items-center border-b border-border last:border-b-0 ${striped ? 'bg-muted/10' : ''}`}
@@ -185,7 +180,7 @@ export function GanttView({ tareas, tags, sprints, kanbanEstados, onTaskClick }:
           </p>
           <div className="space-y-1">
             {unplanned.map((t) => {
-              const tag = t.tag_id ? tagMap[t.tag_id] : null
+              const tag = t.tags?.[0] ?? null
               return (
                 <div
                   key={t.id}
