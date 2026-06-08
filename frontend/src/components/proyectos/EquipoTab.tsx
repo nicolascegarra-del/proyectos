@@ -26,8 +26,11 @@ export function EquipoTab({ proyectoId, currentRol }: EquipoTabProps) {
   const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([])
   const [loading, setLoading] = useState(true)
   const [addOpen, setAddOpen] = useState(false)
+  const [mode, setMode] = useState<'workspace' | 'contacto'>('workspace')
   const [selectedUserId, setSelectedUserId] = useState<string>('')
   const [horasSemana, setHorasSemana] = useState<string>('0')
+  const [contactoNombre, setContactoNombre] = useState<string>('')
+  const [contactoEmail, setContactoEmail] = useState<string>('')
   const [saving, setSaving] = useState(false)
 
   const isAdmin = currentRol === 'owner' || currentRol === 'admin'
@@ -59,19 +62,41 @@ export function EquipoTab({ proyectoId, currentRol }: EquipoTabProps) {
     return workspaceMembers.filter(w => !yaAsignados.has(w.user_id))
   }, [miembros, workspaceMembers])
 
+  const resetForm = () => {
+    setSelectedUserId('')
+    setHorasSemana('0')
+    setContactoNombre('')
+    setContactoEmail('')
+  }
+
+  const openAdd = () => {
+    resetForm()
+    setMode(candidatos.length > 0 ? 'workspace' : 'contacto')
+    setAddOpen(true)
+  }
+
   const handleAdd = async () => {
-    if (!selectedUserId) return
     const horas = parseFloat(horasSemana) || 0
     setSaving(true)
     try {
-      const { data } = await api.post<ProyectoMiembro>(base, {
-        user_id: selectedUserId,
-        horas_semana: horas,
-      })
-      setMiembros(prev => [...prev, data])
+      if (mode === 'contacto') {
+        if (!contactoNombre.trim()) return
+        const { data } = await api.post<ProyectoMiembro>(`${base}/contacto`, {
+          nombre: contactoNombre.trim(),
+          email: contactoEmail.trim() || null,
+          horas_semana: horas,
+        })
+        setMiembros(prev => [...prev, data])
+      } else {
+        if (!selectedUserId) return
+        const { data } = await api.post<ProyectoMiembro>(base, {
+          user_id: selectedUserId,
+          horas_semana: horas,
+        })
+        setMiembros(prev => [...prev, data])
+      }
       setAddOpen(false)
-      setSelectedUserId('')
-      setHorasSemana('0')
+      resetForm()
     } catch (err) {
       toast({ title: getErrorMessage(err), variant: 'destructive' })
     } finally {
@@ -116,7 +141,7 @@ export function EquipoTab({ proyectoId, currentRol }: EquipoTabProps) {
     <div className="space-y-3">
       {isAdmin && (
         <div className="flex justify-end">
-          <Button size="sm" onClick={() => setAddOpen(true)} disabled={candidatos.length === 0}>
+          <Button size="sm" onClick={openAdd}>
             <Plus className="mr-1 h-3.5 w-3.5" /> Añadir miembro
           </Button>
         </div>
@@ -125,7 +150,6 @@ export function EquipoTab({ proyectoId, currentRol }: EquipoTabProps) {
       {miembros.length === 0 ? (
         <p className="text-sm text-muted-foreground italic">
           Aún no hay miembros asignados al proyecto.
-          {isAdmin && candidatos.length === 0 && ' Invita primero personas al workspace.'}
         </p>
       ) : (
         <div className="rounded-md border overflow-hidden">
@@ -150,8 +174,15 @@ export function EquipoTab({ proyectoId, currentRol }: EquipoTabProps) {
                       </span>
                     )}
                     <span>{m.user?.nombre || '—'}</span>
+                    {m.user?.es_contacto && (
+                      <span className="rounded-full bg-klyp-pale px-1.5 py-0.5 text-[10px] font-medium text-klyp-navy">
+                        Sin cuenta
+                      </span>
+                    )}
                   </td>
-                  <td className="px-3 py-2 text-muted-foreground">{m.user?.email || '—'}</td>
+                  <td className="px-3 py-2 text-muted-foreground">
+                    {m.user?.email && !m.user.email.endsWith('@no-login.local') ? m.user.email : '—'}
+                  </td>
                   <td className="px-3 py-2">
                     {isAdmin ? (
                       <Input
@@ -189,22 +220,77 @@ export function EquipoTab({ proyectoId, currentRol }: EquipoTabProps) {
           <DialogHeader>
             <DialogTitle>Añadir miembro al proyecto</DialogTitle>
           </DialogHeader>
+
+          <div className="grid grid-cols-2 gap-1 rounded-md bg-muted p-1 text-xs">
+            <button
+              type="button"
+              onClick={() => setMode('workspace')}
+              className={`rounded px-2 py-1.5 font-medium transition-colors ${
+                mode === 'workspace' ? 'bg-background shadow-sm' : 'text-muted-foreground'
+              }`}
+            >
+              Del workspace
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('contacto')}
+              className={`rounded px-2 py-1.5 font-medium transition-colors ${
+                mode === 'contacto' ? 'bg-background shadow-sm' : 'text-muted-foreground'
+              }`}
+            >
+              Nuevo contacto
+            </button>
+          </div>
+
           <div className="space-y-3 py-2">
-            <div className="space-y-1">
-              <Label>Persona del workspace</Label>
-              <Select value={selectedUserId} onValueChange={setSelectedUserId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona una persona" />
-                </SelectTrigger>
-                <SelectContent>
-                  {candidatos.map(c => (
-                    <SelectItem key={c.user_id} value={c.user_id}>
-                      {c.user?.nombre || c.user?.email || c.user_id}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {mode === 'workspace' ? (
+              <div className="space-y-1">
+                <Label>Persona del workspace</Label>
+                {candidatos.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">
+                    No quedan personas del workspace por añadir. Crea un contacto nuevo.
+                  </p>
+                ) : (
+                  <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona una persona" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {candidatos.map(c => (
+                        <SelectItem key={c.user_id} value={c.user_id}>
+                          {c.user?.nombre || c.user?.email || c.user_id}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="space-y-1">
+                  <Label>Nombre</Label>
+                  <Input
+                    value={contactoNombre}
+                    onChange={e => setContactoNombre(e.target.value)}
+                    placeholder="Ej. María García"
+                    maxLength={255}
+                    autoFocus
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Email <span className="text-muted-foreground">(opcional)</span></Label>
+                  <Input
+                    type="email"
+                    value={contactoEmail}
+                    onChange={e => setContactoEmail(e.target.value)}
+                    placeholder="maria@ejemplo.com"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Este contacto no tendrá acceso a la app; solo figura en el equipo.
+                  </p>
+                </div>
+              </>
+            )}
             <div className="space-y-1">
               <Label>Horas / semana</Label>
               <Input
@@ -218,7 +304,10 @@ export function EquipoTab({ proyectoId, currentRol }: EquipoTabProps) {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddOpen(false)}>Cancelar</Button>
-            <Button onClick={handleAdd} disabled={!selectedUserId || saving}>
+            <Button
+              onClick={handleAdd}
+              disabled={saving || (mode === 'workspace' ? !selectedUserId : !contactoNombre.trim())}
+            >
               {saving ? 'Añadiendo...' : 'Añadir'}
             </Button>
           </DialogFooter>

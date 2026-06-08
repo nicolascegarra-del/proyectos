@@ -6,11 +6,14 @@ import { Button } from '@/components/ui/button'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { RichTextView } from '@/components/ui/rich-text-view'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from '@/components/ui/use-toast'
 import { TagPicker } from '@/components/etiquetas/TagPicker'
 import { TagBadges } from '@/components/etiquetas/TagBadges'
-import { Trash2 } from 'lucide-react'
+import { Pencil, Trash2 } from 'lucide-react'
 import type { NotaProyecto, RolWorkspace, Tag } from '@/types'
 
 const isHtmlEmpty = (html: string): boolean =>
@@ -40,6 +43,10 @@ export function NotasTab({ proyectoId, currentRol }: NotasTabProps) {
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([])
   const [filtroTagId, setFiltroTagId] = useState<string>('todos')
   const [saving, setSaving] = useState(false)
+  const [editTarget, setEditTarget] = useState<NotaProyecto | null>(null)
+  const [editTexto, setEditTexto] = useState('')
+  const [editTagIds, setEditTagIds] = useState<string[]>([])
+  const [editSaving, setEditSaving] = useState(false)
 
   const base = currentWorkspace ? `/workspaces/${currentWorkspace.id}/proyectos/${proyectoId}/notas` : ''
 
@@ -87,8 +94,32 @@ export function NotasTab({ proyectoId, currentRol }: NotasTabProps) {
     }
   }
 
-  const canDelete = (nota: NotaProyecto) =>
+  const canModify = (nota: NotaProyecto) =>
     user?.id === nota.user_id || currentRol === 'owner' || currentRol === 'admin'
+  const canEditTags = (nota: NotaProyecto) => user?.id === nota.user_id
+
+  const openEdit = (nota: NotaProyecto) => {
+    setEditTarget(nota)
+    setEditTexto(nota.texto)
+    setEditTagIds((nota.tags ?? []).map(t => t.id))
+  }
+
+  const handleEditSave = async () => {
+    if (!editTarget || isHtmlEmpty(editTexto)) return
+    setEditSaving(true)
+    try {
+      const { data } = await api.patch<NotaProyecto>(`${base}/${editTarget.id}`, {
+        texto: editTexto,
+        tag_ids: editTagIds,
+      })
+      setNotas(prev => prev.map(n => (n.id === data.id ? data : n)))
+      setEditTarget(null)
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' })
+    } finally {
+      setEditSaving(false)
+    }
+  }
 
   const notasFiltradas = useMemo(
     () => filtroTagId === 'todos'
@@ -167,14 +198,23 @@ export function NotasTab({ proyectoId, currentRol }: NotasTabProps) {
                   <span>{formatDateTime(nota.created_at)}</span>
                   <TagBadges tags={nota.tags} className="ml-1" />
                 </div>
-                {canDelete(nota) && (
-                  <button
-                    onClick={() => handleDelete(nota)}
-                    className="p-1 text-muted-foreground hover:text-destructive"
-                    title="Eliminar nota"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                {canModify(nota) && (
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      onClick={() => openEdit(nota)}
+                      className="p-1 text-muted-foreground hover:text-foreground"
+                      title="Editar nota"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(nota)}
+                      className="p-1 text-muted-foreground hover:text-destructive"
+                      title="Eliminar nota"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 )}
               </div>
               <RichTextView className="mt-2 text-sm" html={nota.texto} />
@@ -182,6 +222,35 @@ export function NotasTab({ proyectoId, currentRol }: NotasTabProps) {
           ))}
         </ul>
       )}
+
+      <Dialog open={!!editTarget} onOpenChange={v => !v && setEditTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar nota</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <RichTextEditor value={editTexto} onChange={setEditTexto} placeholder="Escribe una nota..." />
+            {editTarget && canEditTags(editTarget) ? (
+              <TagPicker
+                tags={tags}
+                value={editTagIds}
+                onChange={setEditTagIds}
+                emptyHint="No tienes etiquetas. Créalas en el menú Etiquetas."
+              />
+            ) : (
+              editTarget && (editTarget.tags?.length ?? 0) > 0 && (
+                <TagBadges tags={editTarget.tags} />
+              )
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditTarget(null)}>Cancelar</Button>
+            <Button onClick={handleEditSave} disabled={editSaving || isHtmlEmpty(editTexto)}>
+              {editSaving ? 'Guardando...' : 'Guardar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -714,6 +714,11 @@ export function TareaModal({
                           </span>
                         )}
                         {m.user?.nombre ?? m.user_id}
+                        {m.user?.es_contacto && (
+                          <span className="rounded-full bg-klyp-pale px-1.5 py-0.5 text-[9px] font-medium text-klyp-navy">
+                            Sin cuenta
+                          </span>
+                        )}
                       </span>
                     </SelectItem>
                   ))}

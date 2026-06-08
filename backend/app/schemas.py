@@ -116,6 +116,7 @@ class UserPublicOut(BaseModel):
     avatar_url: Optional[str]
     plan_id: Optional[uuid.UUID]
     is_active: bool
+    es_contacto: bool = False
     created_at: datetime
     model_config = {"from_attributes": True}
 
@@ -893,6 +894,11 @@ class NotaCreate(BaseModel):
     tag_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
+class NotaUpdate(BaseModel):
+    texto: Optional[str] = Field(default=None, min_length=1)
+    tag_ids: Optional[list[uuid.UUID]] = None
+
+
 class NotaOut(BaseModel):
     id: uuid.UUID
     proyecto_id: uuid.UUID
@@ -900,6 +906,8 @@ class NotaOut(BaseModel):
     texto: str
     tags: list[TagOut] = Field(default_factory=list)
     created_at: datetime
+    updated_at: datetime
+    proyecto_nombre: Optional[str] = None
     autor_nombre: Optional[str] = None
     autor_email: Optional[str] = None
     autor_avatar_url: Optional[str] = None
@@ -910,6 +918,13 @@ class NotaOut(BaseModel):
 
 class ProyectoMiembroCreate(BaseModel):
     user_id: uuid.UUID
+    horas_semana: float = Field(default=0.0, ge=0)
+
+
+class ContactoMiembroCreate(BaseModel):
+    """Crea un miembro de equipo sin cuenta (contacto) y lo añade al proyecto."""
+    nombre: str = Field(min_length=1, max_length=255)
+    email: Optional[EmailStr] = None
     horas_semana: float = Field(default=0.0, ge=0)
 
 

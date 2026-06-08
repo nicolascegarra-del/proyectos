@@ -38,7 +38,8 @@ export interface User {
   avatar_url: string | null
   plan_id: string | null
   is_active: boolean
-  is_superadmin: boolean
+  is_superadmin?: boolean
+  es_contacto?: boolean
   created_at: string
 }
 
@@ -184,6 +185,8 @@ export interface NotaProyecto {
   texto: string
   tags: Tag[]
   created_at: string
+  updated_at: string
+  proyecto_nombre?: string | null
   autor_nombre: string | null
   autor_email: string | null
   autor_avatar_url: string | null

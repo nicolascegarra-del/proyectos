@@ -36,6 +36,7 @@ class User(SQLModel, table=True):
     plan_id: Optional[uuid.UUID] = Field(default=None, foreign_key="plan.id")
     is_active: bool = True
     is_superadmin: bool = False
+    es_contacto: bool = Field(default=False)  # miembro de equipo sin cuenta/login
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
@@ -370,6 +371,7 @@ class NotaProyecto(SQLModel, table=True):
     user_id: uuid.UUID = Field(foreign_key="user.id", index=True)
     texto: str = Field(sa_column=Column(Text, nullable=False))
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class NotaTag(SQLModel, table=True):

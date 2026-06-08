@@ -15,11 +15,13 @@ from app.models import (
     WorkspaceMember,
 )
 from app.schemas import (
+    ContactoMiembroCreate,
     ProyectoMiembroCreate,
     ProyectoMiembroOut,
     ProyectoMiembroUpdate,
     UserPublicOut,
 )
+from app.services.limits import ResourceType, check_limit
 
 router = APIRouter(
     prefix="/workspaces/{workspace_id}/proyectos/{proyecto_id}/miembros",
@@ -120,6 +122,69 @@ async def add_miembro(
     user_result = await session.exec(select(User).where(User.id == data.user_id))
     user = user_result.first()
     return _to_out(miembro, user)
+
+
+@router.post("/contacto", response_model=ProyectoMiembroOut, status_code=status.HTTP_201_CREATED)
+async def add_contacto(
+    workspace_id: uuid.UUID,
+    proyecto_id: uuid.UUID,
+    data: ContactoMiembroCreate,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    member=Depends(get_workspace_member),
+):
+    """Crea un miembro de equipo SIN cuenta (contacto) y lo añade al proyecto.
+
+    El contacto se materializa como un User ligero (sin password, es_contacto=True)
+    y como WorkspaceMember (rol viewer) para que sea reutilizable en otros proyectos
+    del workspace y asignable a tareas igual que un usuario real.
+    """
+    if member.rol not in ADMIN_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo owner/admin del workspace")
+    await _get_proyecto_or_404(workspace_id, proyecto_id, session)
+    await check_limit(session, current_user, ResourceType.miembro, workspace_id=workspace_id)
+
+    # Email: si lo dan, debe ser único; si no, generamos un placeholder interno.
+    if data.email:
+        existing = await session.exec(select(User).where(User.email == data.email))
+        if existing.first():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Ya existe un usuario con ese email",
+            )
+        email = data.email
+    else:
+        email = f"contacto+{uuid.uuid4().hex}@no-login.local"
+
+    contacto = User(
+        email=email,
+        nombre=data.nombre,
+        password_hash=None,
+        es_contacto=True,
+        is_active=True,
+    )
+    session.add(contacto)
+    await session.flush()
+
+    session.add(
+        WorkspaceMember(
+            workspace_id=workspace_id,
+            user_id=contacto.id,
+            rol=RolWorkspace.viewer,
+            invited_by=current_user.id,
+        )
+    )
+
+    miembro = ProyectoMiembro(
+        proyecto_id=proyecto_id,
+        user_id=contacto.id,
+        horas_semana=data.horas_semana,
+    )
+    session.add(miembro)
+    await session.commit()
+    await session.refresh(miembro)
+    await session.refresh(contacto)
+    return _to_out(miembro, contacto)
 
 
 @router.put("/{miembro_id}", response_model=ProyectoMiembroOut)

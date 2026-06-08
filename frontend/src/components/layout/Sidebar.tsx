@@ -7,12 +7,14 @@ import {
   FileText,
   Building2,
   Tags,
+  StickyNote,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true },
   { to: '/proyectos', label: 'Proyectos', icon: FolderKanban },
+  { to: '/notas', label: 'Notas', icon: StickyNote },
   { to: '/presupuestos', label: 'Presupuestos', icon: FileText },
   { to: '/clientes', label: 'Clientes', icon: Users },
   { to: '/etiquetas', label: 'Etiquetas', icon: Tags },

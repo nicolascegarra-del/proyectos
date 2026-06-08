@@ -130,7 +130,7 @@ async def login(
     result = await session.exec(select(User).where(User.email == data.email))
     user = result.first()
 
-    if not user or not user.password_hash or not verify_password(
+    if not user or user.es_contacto or not user.password_hash or not verify_password(
         data.password, user.password_hash
     ):
         ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
@@ -262,7 +262,7 @@ async def forgot_password(
 ):
     result = await session.exec(select(User).where(User.email == data.email))
     user = result.first()
-    if not user:
+    if not user or user.es_contacto:
         return
 
     smtp_result = await session.exec(
