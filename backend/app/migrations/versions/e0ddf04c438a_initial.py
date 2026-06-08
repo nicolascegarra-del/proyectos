@@ -20,6 +20,7 @@ Create Date: 2026-03-23 13:17:28.383662
 """
 from typing import Sequence, Union
 
+import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -383,6 +384,11 @@ def _statements(sql: str) -> list[str]:
 def upgrade() -> None:
     bind = op.get_bind()
     if bind.dialect.name != "postgresql":
+        return
+    # Idempotencia: si el esquema base ya existe (BD construida con create_all
+    # sin stamp de Alembic, p.ej. instalaciones previas), no lo recreamos para
+    # no chocar con tablas/tipos ya presentes.
+    if sa.inspect(bind).has_table("user"):
         return
     for stmt in _statements(_BASE_DDL):
         op.execute(stmt)
