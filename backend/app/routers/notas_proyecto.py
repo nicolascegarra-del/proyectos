@@ -57,9 +57,10 @@ async def list_notas(
     _member=Depends(get_workspace_member),
 ):
     await _get_proyecto_or_404(workspace_id, proyecto_id, session)
+    # outer join con User para no ocultar notas con autor huérfano (to_out admite None).
     query = (
         select(NotaProyecto, User)
-        .join(User, User.id == NotaProyecto.user_id)
+        .join(User, User.id == NotaProyecto.user_id, isouter=True)
         .where(NotaProyecto.proyecto_id == proyecto_id)
     )
     if tag_id is not None:

@@ -88,8 +88,8 @@ def upgrade() -> None:
         FROM (
             SELECT DISTINCT p.workspace_id AS workspace_id,
                    n.user_id AS user_id,
-                   n.tipo AS nombre,
-                   CASE n.tipo
+                   n.tipo::text AS nombre,
+                   CASE n.tipo::text
                        WHEN 'reunion'    THEN '#EAB308'
                        WHEN 'decision'   THEN '#3B82F6'
                        WHEN 'bloqueante' THEN '#EF4444'
@@ -116,7 +116,7 @@ def upgrade() -> None:
         JOIN proyecto p ON p.id = n.proyecto_id
         JOIN tag t ON t.workspace_id = p.workspace_id
                   AND t.user_id = n.user_id
-                  AND t.nombre = n.tipo
+                  AND t.nombre = n.tipo::text
         WHERE NOT EXISTS (
             SELECT 1 FROM nota_tag nt WHERE nt.nota_id = n.id AND nt.tag_id = t.id
         )

@@ -29,9 +29,12 @@ async def list_notas_workspace(
     _member=Depends(get_workspace_member),
 ):
     """Lista todas las notas de los proyectos del workspace, con filtros y orden."""
+    # outer join con User: una nota nunca debe desaparecer del listado por tener
+    # un autor huérfano (p. ej. usuario eliminado en datos antiguos). to_out
+    # admite autor=None.
     query = (
         select(NotaProyecto, User, Proyecto.nombre)
-        .join(User, User.id == NotaProyecto.user_id)
+        .join(User, User.id == NotaProyecto.user_id, isouter=True)
         .join(Proyecto, Proyecto.id == NotaProyecto.proyecto_id)
         .where(Proyecto.workspace_id == workspace_id)
     )

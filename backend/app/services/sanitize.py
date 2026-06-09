@@ -15,17 +15,21 @@ from typing import Optional
 
 ALLOWED_TAGS = {
     "p", "br", "strong", "b", "em", "i", "u",
-    "ol", "ul", "li", "span",
+    "ol", "ul", "li", "span", "img",
 }
 ALLOWED_ATTRIBUTES = {
     "span": {"style"},
+    "img": {"src", "alt", "width", "height", "style"},
 }
+# Protocolos permitidos en atributos de URI (img src admite data: para imágenes
+# pegadas en base64).
+ALLOWED_PROTOCOLS = ["http", "https", "data", "mailto"]
 
-# CSS permitido dentro de style="...": solo font-family y font-size con valores
-# alfanuméricos / px / comillas / espacios / comas. Cualquier otra propiedad se
-# descarta.
+# CSS permitido dentro de style="...": font-family/font-size (selectores del
+# editor) y width/height/max-width (redimensionado de imágenes). Valores
+# alfanuméricos / px / % / comillas / espacios / comas. El resto se descarta.
 _CSS_RULE_RE = re.compile(
-    r"^\s*(font-family|font-size)\s*:\s*([A-Za-z0-9 ,'\"\-\.]+)\s*$",
+    r"^\s*(font-family|font-size|width|height|max-width)\s*:\s*([A-Za-z0-9 ,'\"\-\.%]+)\s*$",
     re.IGNORECASE,
 )
 
@@ -56,6 +60,7 @@ try:
             value,
             tags=ALLOWED_TAGS,
             attributes=ALLOWED_ATTRIBUTES,
+            protocols=ALLOWED_PROTOCOLS,
             strip=True,
             strip_comments=True,
         )
@@ -88,6 +93,22 @@ except ImportError:  # pragma: no cover - fallback minimalista
                 if style_match:
                     safe = _filter_style(style_match.group(1))
                     return f'<span style="{safe}">' if not match.group(0).startswith("</") else "</span>"
+            if tag == "img":
+                src_match = re.search(r'src="([^"]*)"', attrs)
+                src = src_match.group(1) if src_match else ""
+                if not re.match(r"^(https?:|data:image/)", src, re.IGNORECASE):
+                    return ""  # descarta imágenes con protocolo no permitido
+                parts = [f'src="{src}"']
+                for attr in ("alt", "width", "height"):
+                    m = re.search(rf'{attr}="([^"]*)"', attrs)
+                    if m:
+                        parts.append(f'{attr}="{m.group(1)}"')
+                style_match = re.search(r'style="([^"]*)"', attrs)
+                if style_match:
+                    safe = _filter_style(style_match.group(1))
+                    if safe:
+                        parts.append(f'style="{safe}"')
+                return f'<img {" ".join(parts)}>'
             if match.group(0).startswith("</"):
                 return f"</{tag}>"
             return f"<{tag}>"
