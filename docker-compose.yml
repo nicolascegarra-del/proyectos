@@ -24,8 +24,6 @@ services:
       APP_NAME: ${APP_NAME:-Klyp}
       SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL}
       SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD}
-    networks:
-      - klyp-net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -49,8 +47,6 @@ services:
       - "80"
     depends_on:
       - backend
-    networks:
-      - klyp-net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/"]
       interval: 30s
@@ -64,7 +60,3 @@ services:
 
 volumes:
   uploads_data:
-
-networks:
-  klyp-net:
-    driver: bridge
