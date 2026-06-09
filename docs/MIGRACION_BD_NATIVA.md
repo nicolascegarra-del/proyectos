@@ -70,7 +70,48 @@ El backend en contenedor resolverá `host.docker.internal:5432` → tu Postgres 
 
 ## PARTE 2 — Producción (VPS Contabo + Coolify)
 
-> Ventana de mantenimiento corta. **No se borra nada del Docker viejo hasta validar 24–48 h.**
+> **Estrategia elegida: despliegue en paralelo (blue-green).**
+> En vez de un cutover in-place, se levanta el proyecto v6_bd como **proyecto NUEVO
+> en Coolify, en un dominio nuevo** (p. ej. `proyectos.klyp.es`), con su **BD nativa
+> propia** y una **copia** de los datos de producción. El proyecto viejo (v5, Postgres
+> en Docker) sigue intacto como rollback. Cuando el nuevo está validado, se elimina el viejo.
+
+### Flujo blue-green (resumen)
+1. Backup de la BD de producción (v5) **y** del volumen de uploads.
+2. Postgres 16 nativo en el host con BD/rol **`proyectos`** (nombre distinto de `klyp`).
+3. Restaurar el dump de prod en la BD `proyectos` + copiar los ficheros de uploads.
+4. Crear el proyecto nuevo en Coolify (rama `v6_bd`, dominio nuevo) con su `DATABASE_URL`
+   apuntando a `proyectos`. Ambos proyectos conviven sin colisión (ver nota).
+5. Validar el nuevo (login, datos, adjuntos). El viejo sigue sirviendo tráfico hasta aquí.
+6. Cambiar el dominio definitivo al nuevo y **eliminar** el proyecto viejo + su volumen.
+
+> **Por qué no colisionan los dos proyectos en el mismo host:**
+> - El compose de v6 **no fija `container_name`** (Coolify le pone prefijo de proyecto) →
+>   no choca con `klyp-backend`/`klyp-frontend` del v5.
+> - El frontend de v6 **no publica puerto** al host (`expose: 80` + proxy de Coolify por
+>   dominio) → no choca con el `3000:80` del v5.
+> - La BD nativa (`proyectos`, host:5432) y la BD Docker del v5 (`klyp`, dentro del
+>   contenedor, sin puerto publicado) son **servidores distintos** → aislados.
+
+### ⚠️ Migrar también los UPLOADS (no solo la BD)
+El dump SQL **no** contiene los ficheros subidos (viven en el volumen `uploads_data`).
+Cópialos del proyecto viejo al nuevo:
+```bash
+# Localiza el volumen de uploads del v5 (Coolify lo nombra con prefijo de proyecto)
+docker volume ls | grep uploads
+# Copia el contenido del volumen viejo al nuevo (ajusta los nombres reales):
+docker run --rm \
+  -v <volumen_uploads_v5>:/from \
+  -v <volumen_uploads_v6>:/to \
+  alpine sh -c "cp -a /from/. /to/"
+```
+
+---
+
+### Pasos de detalle (building blocks)
+
+> Ventana de mantenimiento corta. **No se borra nada del Docker viejo hasta validar.**
+> Nota: para la BD nueva usa el nombre **`proyectos`** (no `klyp`) en los comandos de abajo.
 
 ### 1. Backup doble (obligatorio)
 ```bash
@@ -83,8 +124,8 @@ cd /apps/klyp
 ### 2. Instalar PostgreSQL 16 nativo en el host
 ```bash
 apt update && apt install -y postgresql-16
-sudo -u postgres psql -c "CREATE ROLE klyp LOGIN PASSWORD '<PASSWORD_FUERTE>';"
-sudo -u postgres psql -c "CREATE DATABASE klyp OWNER klyp;"
+sudo -u postgres psql -c "CREATE ROLE proyectos LOGIN PASSWORD '<PASSWORD_FUERTE>';"
+sudo -u postgres psql -c "CREATE DATABASE proyectos OWNER proyectos;"
 ```
 
 ### 3. Configurar acceso (sin exponer 5432 a Internet)
@@ -98,45 +139,48 @@ password_encryption = scram-sha-256
 `/etc/postgresql/16/main/pg_hba.conf` (añade, antes de las reglas más amplias):
 ```
 # Backend en contenedores Docker
-host    klyp    klyp    172.16.0.0/12    scram-sha-256
+host    proyectos    proyectos    172.16.0.0/12    scram-sha-256
 ```
 Aplica:
 ```bash
 systemctl restart postgresql && systemctl enable postgresql
 ```
 
-### 4. Congelar escrituras y dump final consistente
+### 4. Dump de la BD de producción (origen v5)
 ```bash
-# Parar el backend desde Coolify (o: docker compose stop backend)
-# Con el backend parado, dump final del contenedor de Postgres viejo:
-./scripts/backup_klyp_db.sh /var/backups/klyp     # genera el .dump definitivo
+# Para un dump consistente, congela escrituras del v5 mientras dura el dump
+# (en blue-green puedes hacerlo en una ventana corta; el v5 sigue como rollback).
+./scripts/backup_klyp_db.sh /var/backups/klyp     # dump de la BD 'klyp' del v5
 ```
 
-### 5. Restaurar en el Postgres nativo
+### 5. Restaurar en la BD nativa nueva (`proyectos`)
+El dump `-Fc` no fija el nombre de BD: se restaura en el destino que indiques con `-d`.
 ```bash
-pg_restore --clean --if-exists --no-owner -U klyp -d klyp -h localhost \
+pg_restore --clean --if-exists --no-owner -U proyectos -d proyectos -h localhost \
   /var/backups/klyp/klyp_klyp_YYYYMMDD_HHMMSS.dump
 ```
 
-### 6. Verificar paridad antes de repuntar
+### 6. Verificar paridad antes de validar
 ```bash
 # alembic_version debe ser m3n4o5p6q7r8 (head actual)
-psql -U klyp -d klyp -h localhost -c "SELECT version_num FROM alembic_version;"
-# Conteos de filas en tablas clave (comparar viejo vs nuevo)
-psql -U klyp -d klyp -h localhost -c \
+psql -U proyectos -d proyectos -h localhost -c "SELECT version_num FROM alembic_version;"
+# Conteos de filas en tablas clave (comparar con el origen v5)
+psql -U proyectos -d proyectos -h localhost -c \
   "SELECT 'usuarios',count(*) FROM \"user\" UNION ALL \
    SELECT 'proyectos',count(*) FROM proyecto UNION ALL \
    SELECT 'tareas',count(*) FROM tarea;"
 ```
 > Ajusta los nombres de tabla reales si difieren. Los conteos deben coincidir con el origen.
+> No olvides copiar también los **uploads** (ver sección "Migrar también los UPLOADS").
 
-### 7. Repuntar DATABASE_URL en Coolify y arrancar
-En **Coolify → Environment Variables** del servicio backend:
+### 7. DATABASE_URL en el proyecto nuevo de Coolify
+En **Coolify → (proyecto nuevo) → Environment Variables** del servicio backend:
 ```
-DATABASE_URL=postgresql+asyncpg://klyp:<PASSWORD_FUERTE>@host.docker.internal:5432/klyp
+DATABASE_URL=postgresql+asyncpg://proyectos:<PASSWORD_FUERTE>@host.docker.internal:5432/proyectos
 ```
 > El `docker-compose.yml` ya trae `extra_hosts: host.docker.internal:host-gateway`,
-> así que el contenedor resuelve el host. Arranca el backend.
+> así que el contenedor resuelve el host. Define también el dominio nuevo y el resto de
+> env vars (SECRET_KEY, FERNET_KEY, FRONTEND_URL al dominio nuevo, etc.). Arranca el stack.
 > El `alembic upgrade head` del arranque no debe aplicar nada (ya en head).
 
 ### 8. Smoke test
@@ -150,26 +194,37 @@ ssh -L 5432:localhost:5432 usuario@vps
 # Luego conecta DBeaver/pgAdmin a localhost:5432
 ```
 
-### 10. Decomisionar (tras 24–48 h de validación)
+### 9-bis. Acceso del gestor a la BD nueva
+Mismo túnel SSH, conectando al rol/BD **`proyectos`**:
 ```bash
-docker compose ps                 # confirmar que ya no hay servicio db
-docker volume rm <stack>_postgres_data   # SOLO cuando estés seguro
+ssh -L 5432:localhost:5432 usuario@vps
+# DBeaver/pgAdmin → localhost:5432, BD 'proyectos', rol 'proyectos'
 ```
+
+### 10. Cambio de dominio y decomisión del proyecto viejo (blue-green)
+Cuando el proyecto nuevo esté validado y sirviendo el dominio definitivo:
+```bash
+# En Coolify: eliminar el proyecto VIEJO (v5). Eso borra sus contenedores
+# (klyp-db, klyp-backend, klyp-frontend) y, si lo confirmas, sus volúmenes
+# (postgres_data, uploads_data del v5).
+# Hazlo SOLO tras confirmar que el nuevo tiene TODOS los datos y los uploads.
+```
+> Mantén un último dump del v5 archivado antes de borrar, por si acaso.
 
 ---
 
 ## Rollback
 
-Si la verificación de paridad falla o el smoke test rompe:
-1. Revertir `DATABASE_URL` en Coolify al valor anterior (`...@db:5432/klyp`) y restaurar
-   el `docker-compose.yml` previo (servicio `db`) — los datos siguen intactos en `postgres_data`.
-2. Rearrancar el stack viejo. Cero pérdida: nunca se tocó el volumen original.
+Como es **blue-green**, el rollback es trivial mientras no borres el proyecto viejo:
+1. El proyecto v5 (Postgres en Docker) sigue intacto y sirviendo, o a un clic de rearrancar.
+2. Si el nuevo falla, vuelves a apuntar el dominio al viejo. Cero pérdida: el v5 nunca se tocó.
+3. Solo cuando el nuevo lleve 24–48 h estable, eliminas el viejo.
 
 ---
 
 ## Notas sobre los scripts
 
-- `scripts/backup_klyp_db.sh` autodetecta el contenedor de Postgres. **Tras el cutover ya no
-  habrá contenedor**: para backups de la BD nativa usa directamente
-  `pg_dump -Fc -U klyp -d klyp -h localhost -f <fichero>.dump` (o adapta el script).
-- Configura un cron/systemd-timer en el VPS para `pg_dump` periódico de la BD nativa.
+- `scripts/backup_klyp_db.sh` autodetecta el contenedor de Postgres (sirve para dumpear el
+  v5). Para backups de la **BD nativa nueva** (ya sin contenedor) usa directamente:
+  `pg_dump -Fc -U proyectos -d proyectos -h localhost -f <fichero>.dump`.
+- Configura un cron/systemd-timer en el VPS para `pg_dump` periódico de la BD `proyectos`.

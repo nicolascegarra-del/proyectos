@@ -6,7 +6,8 @@ services:
   backend:
     build:
       context: ./backend
-    container_name: klyp-backend
+    # Sin container_name fijo: Coolify le pone un nombre con prefijo de proyecto,
+    # para poder correr varios proyectos (v5 y v6) en el mismo host sin colisión.
     restart: unless-stopped
     # Necesario en Linux para que el contenedor resuelva host.docker.internal
     # hacia el Postgres nativo del host. En Docker Desktop ya resuelve solo.
@@ -40,10 +41,12 @@ services:
   frontend:
     build:
       context: ./frontend
-    container_name: klyp-frontend
     restart: unless-stopped
-    ports:
-      - "3000:80"
+    # Sin puerto publicado al host: en producción lo enruta el proxy de Coolify
+    # por dominio. 'expose' indica el puerto interno (80) al proxy. En local, el
+    # acceso por http://localhost:3000 lo da docker-compose.override.yml.
+    expose:
+      - "80"
     depends_on:
       - backend
     networks:

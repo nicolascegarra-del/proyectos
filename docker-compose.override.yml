@@ -1,0 +1,11 @@
+# Solo DESARROLLO LOCAL.
+# 'docker compose up' carga este fichero automáticamente y lo MERGEA sobre
+# docker-compose.yml. Coolify despliega con '-f docker-compose.yml', que NO
+# auto-incluye el override, así que en producción esto se ignora.
+#
+# Aquí publicamos el frontend en http://localhost:3000 para el desarrollo,
+# mientras que en producción el acceso lo da el proxy de Coolify por dominio.
+services:
+  frontend:
+    ports:
+      - "3000:80"
