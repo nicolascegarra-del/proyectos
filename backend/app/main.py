@@ -1,8 +1,26 @@
+import logging
 import os
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+# Content-Security-Policy aplicada a las respuestas de la API. La SPA (HTML/JS)
+# la sirve nginx con su propia CSP (ver frontend/nginx.conf). 'unsafe-inline' en
+# style-src es necesario por los estilos inline de Radix UI. Endurecer iterando.
+_CSP = (
+    "default-src 'self'; "
+    "script-src 'self'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: blob:; "
+    "font-src 'self' data:; "
+    "connect-src 'self'; "
+    "frame-ancestors 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'"
+)
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,7 +29,7 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 from sqlmodel import select
 
-from app.config import settings
+from app.config import settings, validate_production_secrets
 from app.core.limiter import limiter
 from app.core.security import decode_access_token, hash_password
 from app.database import AsyncSessionLocal, create_db_and_tables, get_session
@@ -47,6 +65,8 @@ from app.routers import (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Fail-fast: en producción no arrancar con secretos por defecto/vacíos.
+    validate_production_secrets(settings)
     await create_db_and_tables()
     await _seed_defaults()
     yield
@@ -162,6 +182,17 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     )
 
 
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Captura errores no controlados: loguea el detalle internamente y devuelve
+    una respuesta genérica sin stack trace ni datos sensibles al cliente."""
+    logger.exception("Error no controlado en %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Error interno del servidor."},
+    )
+
+
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     response = await call_next(request)
@@ -169,6 +200,10 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    response.headers["Content-Security-Policy"] = _CSP
+    if settings.is_production:
+        # HSTS solo en producción (en local se sirve por HTTP y rompería el acceso).
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
 
@@ -234,9 +269,13 @@ async def serve_upload(
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuario inactivo")
 
-    # Verificar que el archivo existe
-    file_path = UPLOAD_DIR / filename
-    if not file_path.exists() or not file_path.is_file():
+    # Defensa contra path traversal: el filename debe ser un único componente
+    # seguro, y la ruta resuelta debe quedar estrictamente dentro de UPLOAD_DIR.
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archivo no encontrado")
+
+    file_path = (UPLOAD_DIR / filename).resolve()
+    if not file_path.is_relative_to(UPLOAD_DIR.resolve()) or not file_path.is_file():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archivo no encontrado")
 
     # Verificar que el usuario tiene acceso al workspace de la tarea

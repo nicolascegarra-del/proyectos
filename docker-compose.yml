@@ -14,6 +14,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
+      APP_ENV: ${APP_ENV:-development}
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://klyp:klyp_local_dev_2026@host.docker.internal:5432/klyp}
       SECRET_KEY: ${SECRET_KEY}
       ALGORITHM: ${ALGORITHM:-HS256}
@@ -41,14 +42,14 @@ services:
       context: ./frontend
     restart: unless-stopped
     # Sin puerto publicado al host: en producción lo enruta el proxy de Coolify
-    # por dominio. 'expose' indica el puerto interno (80) al proxy. En local, el
-    # acceso por http://localhost:3000 lo da docker-compose.override.yml.
+    # por dominio. 'expose' indica el puerto interno (8080, nginx unprivileged) al
+    # proxy. En local, el acceso por http://localhost:3000 lo da el override.
     expose:
-      - "80"
+      - "8080"
     depends_on:
       - backend
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
       interval: 30s
       timeout: 5s
       retries: 3
