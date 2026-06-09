@@ -8,6 +8,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy import text
 from sqlmodel import select
 
 from app.config import settings
@@ -53,6 +54,15 @@ async def lifespan(app: FastAPI):
 
 async def _seed_defaults():
     async with AsyncSessionLocal() as session:
+        # Con uvicorn --workers >1 todos los procesos ejecutan este seed al
+        # arrancar. Contra una BD vacía eso provoca una carrera (dos workers
+        # insertando el mismo superadmin -> UniqueViolationError y crash de un
+        # worker). Un advisory lock transaccional serializa el seed: solo un
+        # worker siembra; el resto espera y, al entrar, ve los datos ya creados
+        # y los omite. Se libera al hacer commit. Solo aplica en PostgreSQL.
+        if settings.DATABASE_URL.startswith("postgresql"):
+            await session.execute(text("SELECT pg_advisory_xact_lock(727274)"))
+
         plans_result = await session.exec(select(Plan))
         if not plans_result.first():
             free_plan = Plan(
