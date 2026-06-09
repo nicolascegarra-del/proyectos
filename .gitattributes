@@ -1,0 +1,3 @@
+# Los scripts de shell se ejecutan en Linux (VPS): forzar LF siempre,
+# aunque se editen en Windows, para que bash no falle por CRLF.
+*.sh text eol=lf

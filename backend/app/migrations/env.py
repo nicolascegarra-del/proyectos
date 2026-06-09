@@ -43,7 +43,7 @@ target_metadata = SQLModel.metadata
 def get_url():
     return os.environ.get(
         "DATABASE_URL",
-        "postgresql+asyncpg://klyp:klyp@db:5432/klyp",
+        "postgresql+asyncpg://klyp:klyp_local_dev_2026@localhost:5432/klyp",
     )
 
 

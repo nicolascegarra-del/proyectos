@@ -3,7 +3,9 @@ from functools import lru_cache
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "postgresql+asyncpg://klyp:klyp@db:5432/klyp"
+    # Postgres nativo en el host. En Docker se sobreescribe vía env (host.docker.internal);
+    # este default solo aplica al ejecutar el backend de forma nativa contra localhost.
+    DATABASE_URL: str = "postgresql+asyncpg://klyp:klyp_local_dev_2026@localhost:5432/klyp"
 
     SECRET_KEY: str = "changeme-very-long-secret-key-please-change-in-production"
     ALGORITHM: str = "HS256"
