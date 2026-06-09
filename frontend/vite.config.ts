@@ -1,13 +1,16 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
-import { TanStackRouterVite } from '@tanstack/router-vite-plugin'
 import path from 'path'
+
+// Este proyecto usa routing POR CÓDIGO (src/router.tsx con createRoute/
+// createRouter), no routing basado en ficheros. Por eso NO se usa el plugin
+// TanStackRouterVite: exigía un directorio src/routes inexistente y rompía el
+// build con "ENOENT: scandir '/app/src/routes'".
 
 export default defineConfig({
   plugins: [
     react(),
-    TanStackRouterVite(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icons/*.png'],
